@@ -26,10 +26,24 @@
 - **Bot Runtime:** Node.js 20+, TypeScript, discord.js v14
 - **Database:** PostgreSQL (Neon / Supabase), accessed via Prisma ORM
 - **Backend API & Webhooks:** Express.js (raw Stripe webhook signature verification, watch progress ingestion, account linking)
-- **Admin Panel & Student Portal:** HTML5, Vanilla CSS (dark-mode glassmorphism), Vanilla JavaScript
+- **Admin Panel & Student Portal:** HTML5, Vanilla CSS (dark-mode glassmorphism), Vanilla JavaScript — now maintained as standalone repositories (see below)
 - **Payments:** Stripe Subscriptions + Manual/Offline Payment Verification Queue
 - **Gamification:** Append-only XP ledger, streaks, and milestone achievements
 - **Testing:** Vitest (100% pass across 22 test suites)
+
+---
+
+## 📦 Repository Structure
+
+This monolith has been split into three repositories:
+
+| Repository | Purpose |
+|---|---|
+| `academic-bot` (this repo) | Discord bot, Express API & webhooks, Prisma database, tier engine, jobs |
+| `academic-student-portal` | Public student payment & proof submission portal (Vercel) |
+| `academic-admin-panel` | Private staff dashboard for payment verification (Vercel) |
+
+> The `public/` directory still contains bundled copies of both portals so the Express server can serve them locally / from a single origin. The standalone repositories are the source of truth for the deployed portals — set the `backend-api-url` meta tag in their `index.html` to point them at this backend's API.
 
 ---
 
