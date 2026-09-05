@@ -1,0 +1,435 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+  SUSPENDED
+}
+
+enum AssignmentStatus {
+  NOT_STARTED
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ProjectStatus {
+  APPROVED
+  NEEDS_REVISION
+  REJECTED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum ActorType {
+  BOT
+  USER
+  ADMIN
+  SYSTEM
+}
+
+model User {
+  id                    String              @id @default(cuid())
+  discordId             String?             @unique
+  accountId             String              @unique // Website account reference
+  email                 String              @unique
+  currentTier           Int                 @default(1)
+  streakCount           Int                 @default(0)
+  streakLastDate        DateTime?
+  subscriptionStatus    SubscriptionStatus  @default(PENDING)
+  subscriptionExpiresAt DateTime?
+  leaderboardOptOut     Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  subscriptions         Subscription[]
+  lessonProgress        LessonProgress[]
+  quizAttempts          QuizAttempt[]
+  assignmentSubmissions AssignmentSubmission[]
+  projectSubmissions    ProjectSubmission[]
+  xpEvents              XpEvent[]
+  achievements          AchievementUnlock[]
+  challengeSubmissions  ChallengeSubmission[]
+  tickets               Ticket[]
+  linkingCodes          LinkingCode[]
+  aiUsage               AiUsage[]
+  manualPayments        ManualPayment[]
+
+  @@index([discordId])
+  @@index([subscriptionStatus])
+  @@map("users")
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  userId      String
+  plan        String
+  status      SubscriptionStatus @default(PENDING)
+  providerRef String             @unique // Stripe subscription ID
+  startedAt   DateTime           @default(now())
+  expiresAt   DateTime?
+  cancelledAt DateTime?
+  renewedAt   DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model Lesson {
+  id                 String           @id @default(cuid())
+  tier               Int
+  module             Int
+  orderIndex         Int
+  title              String
+  description        String
+  videoUrl           String?
+  notesUrl           String?
+  resourcesUrl       String?
+  promptPackUrl      String?
+  requiresQuiz       Boolean          @default(false)
+  requiresAssignment Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  quiz               Quiz?
+  assignment         Assignment?
+  progress           LessonProgress[]
+
+  @@unique([tier, module, orderIndex])
+  @@index([tier])
+  @@map("lessons")
+}
+
+model LessonProgress {
+  id             String    @id @default(cuid())
+  userId         String
+  lessonId       String
+  watchPercent   Float     @default(0) // 0 - 100
+  videoCompleted Boolean   @default(false)
+  completed      Boolean   @default(false)
+  completedAt    DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson         Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([completed])
+  @@map("lesson_progress")
+}
+
+model Quiz {
+  id           String        @id @default(cuid())
+  lessonId     String        @unique
+  questions    Json          // Array of questions, choices, and answer hashes
+  passingScore Int           @default(80) // Passing score percentage (e.g. 80%)
+  attemptLimit Int           @default(3)
+  enabled      Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  lesson       Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  attempts     QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  score       Int
+  passed      Boolean
+  answers     Json
+  attemptedAt DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([userId, quizId])
+  @@map("quiz_attempts")
+}
+
+model Assignment {
+  id           String                 @id @default(cuid())
+  lessonId     String                 @unique
+  title        String
+  requirements Json                   // Array of prompt/brief requirements
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  lesson       Lesson                 @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  submissions  AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id            String           @id @default(cuid())
+  userId        String
+  assignmentId  String
+  submissionUrl String
+  notes         String?
+  status        AssignmentStatus @default(SUBMITTED)
+  reviewedBy    String?          // Discord ID / Instructor account reference
+  reviewedAt    DateTime?
+  feedback      String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignment    Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, assignmentId])
+  @@index([status])
+  @@map("assignment_submissions")
+}
+
+model Project {
+  id           String              @id @default(cuid())
+  tier         Int
+  title        String
+  requirements Json                // Tier capstone criteria & brief
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  submissions  ProjectSubmission[]
+
+  @@index([tier])
+  @@map("projects")
+}
+
+model ProjectSubmission {
+  id            String        @id @default(cuid())
+  userId        String
+  projectId     String
+  submissionUrl String
+  status        ProjectStatus @default(NEEDS_REVISION)
+  reviewedBy    String?
+  feedback      String?
+  reviewedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project       Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, projectId])
+  @@index([status])
+  @@map("project_submissions")
+}
+
+// Append-only XP ledger. Total XP is always calculated via SUM(amount).
+model XpEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  refType   String?  // 'lesson', 'quiz', 'assignment', 'project', 'challenge', 'streak'
+  refId     String?
+  awardedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([awardedAt])
+  @@map("xp_events")
+}
+
+model Achievement {
+  id               String              @id @default(cuid())
+  key              String              @unique
+  name             String
+  description      String
+  icon             String
+  requirementType  String              // 'lessons_completed', 'tier_completed', 'streak_days', etc.
+  requirementValue Int
+  createdAt        DateTime            @default(now())
+
+  unlocks          AchievementUnlock[]
+
+  @@map("achievements")
+}
+
+model AchievementUnlock {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@map("achievement_unlocks")
+}
+
+model Challenge {
+  id          String                @id @default(cuid())
+  title       String
+  description String
+  deadline    DateTime
+  xpReward    Int                   @default(100)
+  badgeKey    String?
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  submissions ChallengeSubmission[]
+
+  @@map("challenges")
+}
+
+model ChallengeSubmission {
+  id            String    @id @default(cuid())
+  userId        String
+  challengeId   String
+  submissionUrl String
+  winner        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge     Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, challengeId])
+  @@index([userId])
+  @@map("challenge_submissions")
+}
+
+model Ticket {
+  id        String       @id @default(cuid())
+  userId    String
+  category  String
+  channelId String       @unique
+  status    TicketStatus @default(OPEN)
+  openedAt  DateTime     @default(now())
+  closedAt  DateTime?
+
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("tickets")
+}
+
+model LiveClass {
+  id           String   @id @default(cuid())
+  title        String
+  topic        String
+  scheduledAt  DateTime
+  channelUrl   String
+  reminderRole String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("live_classes")
+}
+
+// Append-only audit log for every privileged action. Never updated or deleted.
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorType  ActorType
+  actorId    String
+  action     String
+  targetType String
+  targetId   String
+  reason     String?
+  before     Json?
+  after      Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([targetId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Short-lived verification codes for /link command
+model LinkingCode {
+  id        String    @id @default(cuid())
+  userId    String
+  code      String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([userId])
+  @@map("linking_codes")
+}
+
+// Daily AI rate limit tracker
+model AiUsage {
+  id         String   @id @default(cuid())
+  userId     String
+  command    String
+  tokensUsed Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("ai_usage")
+}
+
+enum ManualPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Student manual / offline payment proof entries
+model ManualPayment {
+  id              String              @id @default(cuid())
+  studentName     String              // Student's full name
+  phoneNumber     String              // Contact phone number
+  email           String              // Contact email
+  discordId       String?             // Discord username / ID if provided
+  transactionId   String              @unique // Reference / Transaction number
+  amount          Float               // Payment amount
+  currency        String              @default("USD")
+  paymentMethod   String              // e.g. Bank Transfer, Mobile Wallet, Zelle, Wire
+  proofUrl        String?             // Screenshot / receipt URL or drive link
+  notes           String?             // Student remarks
+  status          ManualPaymentStatus @default(PENDING)
+  reviewedBy      String?             // Admin name / ID who reviewed
+  reviewedAt      DateTime?
+  rejectionReason String?
+  userId          String?             // Linked User account once matched or created
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  user            User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([transactionId])
+  @@index([phoneNumber])
+  @@index([email])
+  @@map("manual_payments")
+}
+

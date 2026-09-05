@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit Manual Payment Proof • Premium AI Video Ads Academy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/proof.css">
+</head>
+<body>
+  <div class="background-glow"></div>
+  <div class="page-container">
+    <header class="header">
+      <div class="badge">Academy Payment Verification</div>
+      <h1>Submit Manual Payment Proof</h1>
+      <p class="subtitle">Complete the form below with your offline/direct transaction details. Our staff reviews and activates your membership in the database within minutes.</p>
+    </header>
+
+    <div class="card form-card">
+      <form id="paymentProofForm">
+        <div class="form-grid">
+          <!-- Student Full Name -->
+          <div class="form-group">
+            <label for="studentName">Student Full Name <span class="required">*</span></label>
+            <input type="text" id="studentName" name="studentName" placeholder="e.g. Alex Morgan" required autocomplete="name">
+            <span class="field-hint">Your full legal or account name</span>
+          </div>
+
+          <!-- Contact Phone Number -->
+          <div class="form-group">
+            <label for="phoneNumber">Phone / WhatsApp Number <span class="required">*</span></label>
+            <input type="tel" id="phoneNumber" name="phoneNumber" placeholder="e.g. +1 555-019-2834" required autocomplete="tel">
+            <span class="field-hint">For verification if transaction needs review</span>
+          </div>
+
+          <!-- Email Address -->
+          <div class="form-group">
+            <label for="email">Account Email Address <span class="required">*</span></label>
+            <input type="email" id="email" name="email" placeholder="e.g. alex@example.com" required autocomplete="email">
+            <span class="field-hint">Must match your Academy account email</span>
+          </div>
+
+          <!-- Discord User ID or Username -->
+          <div class="form-group">
+            <label for="discordId">Discord Username or User ID <span class="optional">(Optional)</span></label>
+            <input type="text" id="discordId" name="discordId" placeholder="e.g. alex_videoads or 1849204910293847">
+            <span class="field-hint">Enables instant automated role assignment</span>
+          </div>
+
+          <!-- Payment Method -->
+          <div class="form-group">
+            <label for="paymentMethod">Payment Method Used <span class="required">*</span></label>
+            <select id="paymentMethod" name="paymentMethod" required>
+              <option value="" disabled selected>Select payment method...</option>
+              <option value="Bank Wire / Direct Transfer">Bank Wire / Direct Transfer</option>
+              <option value="Zelle / Venmo">Zelle / Venmo</option>
+              <option value="Mobile Wallet (Esewa / bKash / JazzCash)">Mobile Wallet (Esewa / bKash / JazzCash)</option>
+              <option value="Crypto (USDT / USDC)">Crypto (USDT / USDC)</option>
+              <option value="Cash / In-Person">Cash / In-Person Deposit</option>
+              <option value="Other Provider">Other Direct Provider</option>
+            </select>
+          </div>
+
+          <!-- Transaction ID / Reference -->
+          <div class="form-group">
+            <label for="transactionId">Transaction Reference / Number <span class="required">*</span></label>
+            <input type="text" id="transactionId" name="transactionId" placeholder="e.g. TXN-984210492" required>
+            <span class="field-hint">The bank transfer ref, receipt ID, or mobile confirmation number</span>
+          </div>
+
+          <!-- Amount Paid -->
+          <div class="form-group">
+            <label for="amount">Amount Paid (USD) <span class="required">*</span></label>
+            <div class="input-currency-wrapper">
+              <span class="currency-symbol">$</span>
+              <input type="number" id="amount" name="amount" step="0.01" min="1" placeholder="49.00" required>
+            </div>
+            <span class="field-hint">Exact amount sent according to receipt</span>
+          </div>
+
+          <!-- Proof / Receipt URL -->
+          <div class="form-group">
+            <label for="proofUrl">Receipt URL / Screenshot Link <span class="optional">(Recommended)</span></label>
+            <input type="url" id="proofUrl" name="proofUrl" placeholder="https://imgur.com/... or Google Drive link">
+            <span class="field-hint">Public link to receipt image or PDF bank slip</span>
+          </div>
+        </div>
+
+        <!-- Notes / Remarks -->
+        <div class="form-group full-width">
+          <label for="notes">Additional Remarks / Notes <span class="optional">(Optional)</span></label>
+          <textarea id="notes" name="notes" rows="3" placeholder="Add any details about sender bank, timestamp, or course plan..."></textarea>
+        </div>
+
+        <!-- Alert messages -->
+        <div id="statusAlert" class="alert hidden"></div>
+
+        <!-- Submit Button -->
+        <div class="form-actions">
+          <button type="submit" id="submitBtn" class="btn btn-primary">
+            <span class="btn-text">Submit Payment Proof</span>
+            <span class="spinner hidden"></span>
+          </button>
+        </div>
+      </form>
+
+      <!-- Success Card (hidden initially) -->
+      <div id="successCard" class="success-card hidden">
+        <div class="success-icon">✅</div>
+        <h2>Payment Proof Submitted!</h2>
+        <p class="success-desc">Thank you! Your payment proof has been successfully queued in the staff verification pipeline.</p>
+        
+        <div class="details-box">
+          <div class="detail-row">
+            <span>Transaction Reference:</span>
+            <strong id="confirmedTxId">TXN-00000</strong>
+          </div>
+          <div class="detail-row">
+            <span>Current Status:</span>
+            <span class="status-pill pending">PENDING REVIEW</span>
+          </div>
+        </div>
+
+        <div class="instructions-card">
+          <h3>Next Steps:</h3>
+          <ol>
+            <li>Make sure you are in the official <strong>Academy Discord server</strong>.</li>
+            <li>Run the command <code>/link</code> inside any channel to connect your Discord ID.</li>
+            <li>Once approved by our administrators, your <strong>@Premium</strong> and <strong>@Tier-1</strong> roles will unlock instantly!</li>
+          </ol>
+        </div>
+
+        <button type="button" class="btn btn-secondary" onclick="window.location.reload()">Submit Another Proof</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Premium AI Video Ads Academy • Single Source of Truth Payment Pipeline</p>
+      <p><a href="/admin">Staff Admin Portal</a></p>
+    </footer>
+  </div>
+
+  <script src="/js/proof.js"></script>
+</body>
+</html>

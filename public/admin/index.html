@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Academy Control Center • Admin Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/css/admin.css">
+</head>
+<body>
+  <!-- Auth Unlock Modal (if key not saved) -->
+  <div id="authModal" class="modal-overlay">
+    <div class="modal-card auth-card">
+      <div class="auth-header">
+        <div class="brand-badge">ACADEMY ADMIN</div>
+        <h2>Admin Authentication</h2>
+        <p>Enter your <code>ADMIN_PANEL_KEY</code> to access the database control center.</p>
+      </div>
+      <form id="authForm">
+        <div class="form-group">
+          <label for="adminKeyInput">Access Key</label>
+          <input type="password" id="adminKeyInput" placeholder="Enter secret key..." required autocomplete="current-password">
+        </div>
+        <div id="authError" class="alert error hidden">Invalid Admin Key</div>
+        <button type="submit" class="btn btn-primary full-width">Unlock Dashboard</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Admin Interface -->
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h3>Academy Hub</h3>
+          <span class="version-tag">Admin Console v1.0</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="paymentsTab">
+          <span class="nav-icon">🧾</span>
+          <span class="nav-label">Manual Payments</span>
+          <span id="pendingBadge" class="nav-badge hidden">0</span>
+        </button>
+        <button class="nav-item" data-tab="studentsTab">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Student Directory</span>
+        </button>
+        <button class="nav-item" data-tab="auditTab">
+          <span class="nav-icon">🛡️</span>
+          <span class="nav-label">Audit Logs</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <div class="status-indicator online"></div>
+          <div>
+            <div class="status-title">Database Connected</div>
+            <div id="botStatusText" class="status-sub">Bot Sync Ready</div>
+          </div>
+        </div>
+        <button id="logoutBtn" class="btn-logout" title="Lock Admin Panel">🔒 Lock</button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Manual Payment Verification Queue</h1>
+          <p class="topbar-sub">Single Source of Truth Database Control Panel</p>
+        </div>
+        <div class="topbar-actions">
+          <a href="/submit-proof.html" target="_blank" class="btn btn-secondary">
+            <span>🔗 Student Form</span>
+          </a>
+          <button id="openDirectPaymentBtn" class="btn btn-primary">
+            <span>➕ Record Direct Payment</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Stat Counters Grid -->
+      <section class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-title">Pending Verification</span>
+            <span class="stat-icon warning">⏳</span>
+          </div>
+          <div id="statPending" class="stat-value highlight-warning">0</div>
+          <div class="stat-footer">Awaiting staff review</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-title">Active Subscribers</span>
+            <span class="stat-icon success">💎</span>
+          </div>
+          <div id="statActive" class="stat-value">0</div>
+          <div class="stat-footer">Synchronized in Discord</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-title">Verified Manual Revenue</span>
+            <span class="stat-icon primary">💰</span>
+          </div>
+          <div id="statRevenue" class="stat-value">$0.00</div>
+          <div class="stat-footer">Direct & offline payments</div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-title">Total Enrolled Students</span>
+            <span class="stat-icon default">🎓</span>
+          </div>
+          <div id="statTotalUsers" class="stat-value">0</div>
+          <div id="statTiers" class="stat-footer">T1: 0 • T2: 0 • T3: 0 • Grad: 0</div>
+        </div>
+      </section>
+
+      <!-- TAB 1: Manual Payments Queue -->
+      <section id="paymentsTab" class="tab-pane active">
+        <div class="table-controls">
+          <div class="filter-pills">
+            <button class="pill active" data-filter="PENDING">Pending (<span id="pillPendingCount">0</span>)</button>
+            <button class="pill" data-filter="APPROVED">Approved</button>
+            <button class="pill" data-filter="REJECTED">Rejected</button>
+            <button class="pill" data-filter="ALL">All Records</button>
+          </div>
+          <div class="search-box">
+            <input type="text" id="paymentSearchInput" placeholder="Search by name, phone number, or transaction ID...">
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Student Name</th>
+                <th>Phone Number</th>
+                <th>Tx ID / Reference</th>
+                <th>Amount</th>
+                <th>Method</th>
+                <th>Proof / Link</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="paymentsTableBody">
+              <tr>
+                <td colspan="9" class="empty-state">Loading payment proofs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 2: Student Directory -->
+      <section id="studentsTab" class="tab-pane">
+        <div class="table-controls">
+          <div class="search-box full-search">
+            <input type="text" id="studentSearchInput" placeholder="Search students by email, Discord ID, or account ID...">
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Email</th>
+                <th>Discord ID</th>
+                <th>Current Tier</th>
+                <th>Subscription Status</th>
+                <th>Streak</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="studentsTableBody">
+              <tr>
+                <td colspan="7" class="empty-state">Loading students...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 3: Audit Trail -->
+      <section id="auditTab" class="tab-pane">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Reason / Notes</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="auditTableBody">
+              <tr>
+                <td colspan="6" class="empty-state">Loading audit logs...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Approve Payment Modal -->
+  <div id="approveModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Approve Payment & Grant Access</h3>
+        <button class="modal-close" onclick="closeModal('approveModal')">&times;</button>
+      </div>
+      <form id="approveForm">
+        <input type="hidden" id="approvePaymentId">
+        <div class="modal-details-callout">
+          <div>Student: <strong id="approveStudentName">-</strong></div>
+          <div>Phone: <strong id="approvePhoneNumber">-</strong></div>
+          <div>Tx ID: <strong id="approveTxId">-</strong></div>
+          <div>Amount: <strong id="approveAmount">-</strong></div>
+        </div>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="approveDuration">Access Duration (Days)</label>
+            <select id="approveDuration" required>
+              <option value="30" selected>30 Days (Standard Monthly)</option>
+              <option value="90">90 Days (Quarterly)</option>
+              <option value="180">180 Days (Half Year)</option>
+              <option value="365">365 Days (Full Year Pass)</option>
+              <option value="7">7 Days (Trial / Extension)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="approveTier">Starting Tier</label>
+            <select id="approveTier" required>
+              <option value="1" selected>Tier 1: Fundamentals</option>
+              <option value="2">Tier 2: Advanced AI Prompting</option>
+              <option value="3">Tier 3: Agency Mastery</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="approveNotes">Admin Approval Note / Reason</label>
+          <input type="text" id="approveNotes" placeholder="e.g. Verified with bank receipt slip #1029" required>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('approveModal')">Cancel</button>
+          <button type="submit" class="btn btn-success">✅ Confirm & Grant Access</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reject Payment Modal -->
+  <div id="rejectModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Reject Payment Proof</h3>
+        <button class="modal-close" onclick="closeModal('rejectModal')">&times;</button>
+      </div>
+      <form id="rejectForm">
+        <input type="hidden" id="rejectPaymentId">
+        <div class="form-group">
+          <label for="rejectReason">Rejection Reason <span class="required">*</span></label>
+          <textarea id="rejectReason" rows="3" placeholder="e.g. Transaction reference not found in bank statement, amount mismatch..." required></textarea>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('rejectModal')">Cancel</button>
+          <button type="submit" class="btn btn-danger">❌ Reject Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Direct Payment Entry Modal -->
+  <div id="directPaymentModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Record Direct / Offline Payment</h3>
+        <button class="modal-close" onclick="closeModal('directPaymentModal')">&times;</button>
+      </div>
+      <form id="directPaymentForm">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="directName">Student Name *</label>
+            <input type="text" id="directName" required placeholder="Full Name">
+          </div>
+          <div class="form-group">
+            <label for="directPhone">Phone Number *</label>
+            <input type="text" id="directPhone" required placeholder="+1 555-019-2834">
+          </div>
+          <div class="form-group">
+            <label for="directEmail">Email Address *</label>
+            <input type="email" id="directEmail" required placeholder="student@example.com">
+          </div>
+          <div class="form-group">
+            <label for="directDiscord">Discord ID / User</label>
+            <input type="text" id="directDiscord" placeholder="Optional Discord ID">
+          </div>
+          <div class="form-group">
+            <label for="directTx">Transaction Reference</label>
+            <input type="text" id="directTx" placeholder="Leave empty for auto-generated">
+          </div>
+          <div class="form-group">
+            <label for="directAmount">Amount Paid ($) *</label>
+            <input type="number" id="directAmount" step="0.01" min="1" required placeholder="49.00">
+          </div>
+          <div class="form-group">
+            <label for="directDuration">Duration (Days)</label>
+            <select id="directDuration">
+              <option value="30" selected>30 Days</option>
+              <option value="90">90 Days</option>
+              <option value="365">365 Days</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="directTier">Tier Access</label>
+            <select id="directTier">
+              <option value="1" selected>Tier 1</option>
+              <option value="2">Tier 2</option>
+              <option value="3">Tier 3</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="directMethod">Payment Method</label>
+          <input type="text" id="directMethod" value="Cash / Direct Bank Wire" required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('directPaymentModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save & Activate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tier Override Modal -->
+  <div id="tierModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Override Student Tier Level</h3>
+        <button class="modal-close" onclick="closeModal('tierModal')">&times;</button>
+      </div>
+      <form id="tierForm">
+        <input type="hidden" id="tierUserId">
+        <div class="form-group">
+          <label>Student Email</label>
+          <input type="text" id="tierUserEmail" readonly>
+        </div>
+        <div class="form-group">
+          <label for="targetTierSelect">Select Target Tier</label>
+          <select id="targetTierSelect" required>
+            <option value="1">Tier 1: Fundamentals</option>
+            <option value="2">Tier 2: Advanced Prompting</option>
+            <option value="3">Tier 3: Agency Mastery</option>
+            <option value="4">Tier 4: Graduate</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="tierReasonInput">Mandatory Reason (Audited) *</label>
+          <input type="text" id="tierReasonInput" placeholder="Reason for manual tier promotion..." required>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('tierModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Tier</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/admin/js/admin.js"></script>
+</body>
+</html>
