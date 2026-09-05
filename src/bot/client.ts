@@ -32,6 +32,10 @@ export function createDiscordClient(): Client {
     initExpiryCheckJob(client);
   });
 
+  client.on(Events.Error, error => {
+    logger.error({ err: error }, 'Discord client encountered a network or websocket error');
+  });
+
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     if (!interaction.isChatInputCommand()) return;
 

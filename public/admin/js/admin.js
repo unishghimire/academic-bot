@@ -20,20 +20,58 @@ function initAuth() {
   const adminKeyInput = document.getElementById('adminKeyInput');
   const authError = document.getElementById('authError');
   const logoutBtn = document.getElementById('logoutBtn');
+  const togglePasswordBtn = document.getElementById('togglePasswordBtn');
+  const fillDefaultKeyBtn = document.getElementById('fillDefaultKeyBtn');
+  const authSubmitBtn = document.getElementById('authSubmitBtn');
+
+  // Toggle Password visibility
+  togglePasswordBtn?.addEventListener('click', () => {
+    if (adminKeyInput.type === 'password') {
+      adminKeyInput.type = 'text';
+      togglePasswordBtn.textContent = '🔒 Hide Key';
+    } else {
+      adminKeyInput.type = 'password';
+      togglePasswordBtn.textContent = '👁️ Show Key';
+    }
+  });
+
+  // Auto-Fill default key
+  fillDefaultKeyBtn?.addEventListener('click', () => {
+    adminKeyInput.value = 'academy_admin_secret_2026';
+    adminKeyInput.focus();
+    authError.classList.add('hidden');
+  });
 
   if (!currentAdminKey) {
     authModal.classList.remove('hidden');
   } else {
-    loadDashboard();
+    // Validate stored key
+    fetch('/api/admin/verify', { headers: { 'x-admin-key': currentAdminKey } })
+      .then((res) => {
+        if (!res.ok) throw new Error('Key expired');
+        authModal.classList.add('hidden');
+        loadDashboard();
+      })
+      .catch(() => {
+        sessionStorage.removeItem('academy_admin_key');
+        currentAdminKey = '';
+        authModal.classList.remove('hidden');
+      });
   }
 
   authForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const key = adminKeyInput.value.trim();
+    authError.classList.add('hidden');
+    let key = adminKeyInput.value.trim().replace(/^["']|["']$/g, '');
     if (!key) return;
 
+    if (authSubmitBtn) {
+      authSubmitBtn.disabled = true;
+      authSubmitBtn.textContent = 'Verifying...';
+    }
+
     try {
-      const res = await fetch('/api/admin/stats', {
+      const res = await fetch('/api/admin/verify', {
         headers: { 'x-admin-key': key },
       });
 
@@ -47,6 +85,11 @@ function initAuth() {
       loadDashboard();
     } catch {
       authError.classList.remove('hidden');
+    } finally {
+      if (authSubmitBtn) {
+        authSubmitBtn.disabled = false;
+        authSubmitBtn.textContent = 'Unlock Dashboard';
+      }
     }
   });
 

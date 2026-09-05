@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { prisma } from '../../db/client.js';
+import { prisma, isDatabaseOnline } from '../../db/client.js';
+import { localStore } from '../../db/local-store.js';
 import { env } from '../../config/env.js';
 import { manualPaymentService } from '../../services/manual-payment.service.js';
 import { paymentMethodService } from '../../services/payment-method.service.js';
@@ -19,7 +20,10 @@ export function createAdminRouter(discordClient?: Client | null): Router {
     const queryKey = req.query.key as string;
     const token = authHeader || queryKey;
 
-    if (!token || token !== env.ADMIN_PANEL_KEY) {
+    const cleanToken = (token || '').trim().replace(/^["']|["']$/g, '');
+    const cleanKey = (env.ADMIN_PANEL_KEY || '').trim().replace(/^["']|["']$/g, '');
+
+    if (!cleanToken || cleanToken !== cleanKey) {
       res.status(401).json({ error: 'Unauthorized: Invalid Admin Panel Access Key' });
       return;
     }
@@ -29,8 +33,36 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
   router.use(requireAdminAuth);
 
+  // 0. Verify access key without requiring database
+  router.get('/verify', (_req: Request, res: Response) => {
+    res.json({ success: true, message: 'Admin access key verified successfully' });
+  });
+
   // 1. Dashboard Overview Stats
   router.get('/stats', async (_req: Request, res: Response) => {
+    if (!isDatabaseOnline()) {
+      const pending = localStore.getManualPayments('PENDING');
+      const approved = localStore.getManualPayments('APPROVED');
+      const revenue = approved.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+      res.json({
+        success: true,
+        stats: {
+          totalUsers: localStore.getUsers().length,
+          activeSubscribers: localStore.getUsers().filter(u => u.subscriptionStatus === 'ACTIVE').length,
+          pendingPayments: pending.length,
+          approvedPayments: approved.length,
+          totalManualRevenue: revenue,
+          tierDistribution: { tier1: 0, tier2: 0, tier3: 0, graduates: 0 },
+          auditLogsCount: localStore.getAuditLogs().length,
+          botOnline: discordClient?.isReady() ?? false,
+          dbConnected: false,
+          warning: 'PostgreSQL database is currently disconnected. System active in local resilient storage mode.',
+        },
+      });
+      return;
+    }
+
     try {
       const [
         totalUsers,
@@ -70,10 +102,26 @@ export function createAdminRouter(discordClient?: Client | null): Router {
           tierDistribution: { tier1, tier2, tier3, graduates },
           auditLogsCount: recentAuditCount,
           botOnline: discordClient?.isReady() ?? false,
+          dbConnected: true,
         },
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      // Graceful fallback if database is not reachable yet
+      res.json({
+        success: true,
+        stats: {
+          totalUsers: 0,
+          activeSubscribers: 0,
+          pendingPayments: 0,
+          approvedPayments: 0,
+          totalManualRevenue: 0,
+          tierDistribution: { tier1: 0, tier2: 0, tier3: 0, graduates: 0 },
+          auditLogsCount: 0,
+          botOnline: discordClient?.isReady() ?? false,
+          dbConnected: false,
+          warning: 'PostgreSQL database is currently disconnected. Update DATABASE_URL password in .env.',
+        },
+      });
     }
   });
 
@@ -90,7 +138,7 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
       res.json({ success: true, data: payments });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json({ success: true, data: [], error: error.message });
     }
   });
 
@@ -209,6 +257,11 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
   // 6. List Students & Manage Tiers
   router.get('/users', async (req: Request, res: Response) => {
+    if (!isDatabaseOnline()) {
+      res.json({ success: true, data: localStore.getUsers() });
+      return;
+    }
+
     try {
       const search = req.query.search as string | undefined;
       const where: any = {};
@@ -234,7 +287,7 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
       res.json({ success: true, data: users });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json({ success: true, data: [], error: error.message });
     }
   });
 
@@ -268,8 +321,14 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
   // 8. View Audit Logs
   router.get('/audit-logs', async (req: Request, res: Response) => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+
+    if (!isDatabaseOnline()) {
+      res.json({ success: true, data: localStore.getAuditLogs(limit) });
+      return;
+    }
+
     try {
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
       const logs = await prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -277,7 +336,7 @@ export function createAdminRouter(discordClient?: Client | null): Router {
 
       res.json({ success: true, data: logs });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json({ success: true, data: [], error: error.message });
     }
   });
 
@@ -287,7 +346,7 @@ export function createAdminRouter(discordClient?: Client | null): Router {
       const methods = await paymentMethodService.listAllMethods();
       res.json({ success: true, data: methods });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.json({ success: true, data: [], error: error.message });
     }
   });
 

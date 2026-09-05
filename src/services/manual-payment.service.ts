@@ -1,11 +1,12 @@
 import { PrismaClient, ManualPaymentStatus, SubscriptionStatus } from '@prisma/client';
-import { prisma as defaultPrisma } from '../db/client.js';
+import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
 import { auditService, AuditService } from './audit.service.js';
 import { roleSyncService, RoleSyncService } from './role-sync.service.js';
 import { logger } from '../utils/logger.js';
 import { Client, TextChannel, EmbedBuilder } from 'discord.js';
 import { COLORS, EMBED_FOOTER } from '../config/constants.js';
 import { env } from '../config/env.js';
+import { localStore } from '../db/local-store.js';
 
 export interface SubmitPaymentProofDto {
   studentName: string;
@@ -39,6 +40,10 @@ export class ManualPaymentService {
     private roleSync: RoleSyncService = roleSyncService
   ) {}
 
+  private isOffline(): boolean {
+    return this.db === defaultPrisma && !isDatabaseOnline();
+  }
+
   /**
    * Submits a manual payment proof for review
    */
@@ -56,26 +61,28 @@ export class ManualPaymentService {
     }
 
     // Check for existing duplicate transaction reference
-    const existing = await this.db.manualPayment.findUnique({
-      where: { transactionId: data.transactionId.trim() },
-    });
+    let existing: any = null;
+    if (this.isOffline()) {
+      existing = localStore.findPaymentByTxId(data.transactionId.trim());
+    } else {
+      try {
+        existing = await this.db.manualPayment.findUnique({
+          where: { transactionId: data.transactionId.trim() },
+        });
+      } catch {
+        existing = localStore.findPaymentByTxId(data.transactionId.trim());
+      }
+    }
 
     if (existing) {
       throw new Error(`Transaction ID "${data.transactionId}" has already been submitted (Status: ${existing.status}).`);
     }
 
-    // Attempt to link to an existing user record if matching email or discordId
-    const matchingUser = await this.db.user.findFirst({
-      where: {
-        OR: [
-          { email: data.email.trim().toLowerCase() },
-          ...(data.discordId ? [{ discordId: data.discordId.trim() }] : []),
-        ],
-      },
-    });
+    let payment: any;
 
-    const payment = await this.db.manualPayment.create({
-      data: {
+    if (this.isOffline()) {
+      payment = {
+        id: `mp_${Date.now()}`,
         studentName: data.studentName.trim(),
         phoneNumber: data.phoneNumber.trim(),
         email: data.email.trim().toLowerCase(),
@@ -87,9 +94,71 @@ export class ManualPaymentService {
         proofUrl: data.proofUrl ? data.proofUrl.trim() : null,
         notes: data.notes ? data.notes.trim() : null,
         status: ManualPaymentStatus.PENDING,
-        userId: matchingUser ? matchingUser.id : null,
-      },
-    });
+        reviewedBy: null,
+        reviewedAt: null,
+        rejectionReason: null,
+        userId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      localStore.saveManualPayment(payment);
+    } else {
+      // Attempt to link to an existing user record if matching email or discordId
+      let matchingUser: any = null;
+      try {
+        matchingUser = await this.db.user.findFirst({
+          where: {
+            OR: [
+              { email: data.email.trim().toLowerCase() },
+              ...(data.discordId ? [{ discordId: data.discordId.trim() }] : []),
+            ],
+          },
+        });
+      } catch {
+        // Ignore if DB unreachable
+      }
+
+      try {
+        payment = await this.db.manualPayment.create({
+          data: {
+            studentName: data.studentName.trim(),
+            phoneNumber: data.phoneNumber.trim(),
+            email: data.email.trim().toLowerCase(),
+            discordId: data.discordId ? data.discordId.trim() : null,
+            transactionId: data.transactionId.trim(),
+            amount: data.amount,
+            currency: data.currency || 'USD',
+            paymentMethod: data.paymentMethod.trim(),
+            proofUrl: data.proofUrl ? data.proofUrl.trim() : null,
+            notes: data.notes ? data.notes.trim() : null,
+            status: ManualPaymentStatus.PENDING,
+            userId: matchingUser ? matchingUser.id : null,
+          },
+        });
+      } catch {
+        payment = {
+          id: `mp_${Date.now()}`,
+          studentName: data.studentName.trim(),
+          phoneNumber: data.phoneNumber.trim(),
+          email: data.email.trim().toLowerCase(),
+          discordId: data.discordId ? data.discordId.trim() : null,
+          transactionId: data.transactionId.trim(),
+          amount: data.amount,
+          currency: data.currency || 'USD',
+          paymentMethod: data.paymentMethod.trim(),
+          proofUrl: data.proofUrl ? data.proofUrl.trim() : null,
+          notes: data.notes ? data.notes.trim() : null,
+          status: ManualPaymentStatus.PENDING,
+          reviewedBy: null,
+          reviewedAt: null,
+          rejectionReason: null,
+          userId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        localStore.saveManualPayment(payment);
+      }
+    }
 
     await this.auditor.log({
       actorType: 'USER',
@@ -152,6 +221,22 @@ export class ManualPaymentService {
     search?: string;
     limit?: number;
   }) {
+    if (this.isOffline()) {
+      let payments = localStore.getManualPayments(options?.status as string);
+      if (options?.search && options.search.trim()) {
+        const q = options.search.trim().toLowerCase();
+        payments = payments.filter(
+          p =>
+            p.studentName.toLowerCase().includes(q) ||
+            p.phoneNumber.toLowerCase().includes(q) ||
+            p.transactionId.toLowerCase().includes(q) ||
+            p.email.toLowerCase().includes(q) ||
+            (p.discordId && p.discordId.toLowerCase().includes(q))
+        );
+      }
+      return payments;
+    }
+
     const where: any = {};
 
     if (options?.status && options.status !== 'ALL') {
@@ -169,23 +254,27 @@ export class ManualPaymentService {
       ];
     }
 
-    const payments = await this.db.manualPayment.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: options?.limit || 100,
-      include: {
-        user: {
-          select: {
-            id: true,
-            discordId: true,
-            currentTier: true,
-            subscriptionStatus: true,
+    try {
+      const payments = await this.db.manualPayment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: options?.limit || 100,
+        include: {
+          user: {
+            select: {
+              id: true,
+              discordId: true,
+              currentTier: true,
+              subscriptionStatus: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    return payments;
+      return payments;
+    } catch {
+      return localStore.getManualPayments(options?.status as string);
+    }
   }
 
   /**
@@ -196,10 +285,19 @@ export class ManualPaymentService {
     params: ApprovePaymentDto,
     discordClient?: Client | null
   ) {
-    const payment = await this.db.manualPayment.findUnique({
-      where: { id: paymentId },
-      include: { user: true },
-    });
+    let payment: any = null;
+    if (this.isOffline()) {
+      payment = localStore.findPaymentById(paymentId);
+    } else {
+      try {
+        payment = await this.db.manualPayment.findUnique({
+          where: { id: paymentId },
+          include: { user: true },
+        });
+      } catch {
+        payment = localStore.findPaymentById(paymentId);
+      }
+    }
 
     if (!payment) {
       throw new Error(`Manual payment with ID "${paymentId}" not found`);
@@ -213,141 +311,196 @@ export class ManualPaymentService {
     const tier = params.tier || 1;
     const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
 
+    if (this.isOffline()) {
+      const updatedPayment = localStore.updatePaymentStatus(paymentId, ManualPaymentStatus.APPROVED, params.adminId);
+      const targetUser = {
+        id: `usr_${Date.now()}`,
+        email: payment.email,
+        discordId: payment.discordId || null,
+        currentTier: tier,
+        subscriptionStatus: SubscriptionStatus.ACTIVE,
+      };
+      localStore.saveUser(targetUser);
+
+      await this.auditor.log({
+        actorType: 'ADMIN',
+        actorId: params.adminId,
+        action: 'MANUAL_PAYMENT_APPROVED',
+        targetType: 'MANUAL_PAYMENT',
+        targetId: paymentId,
+        reason: params.notes || `Manual payment of $${payment.amount} approved for ${durationDays} days (Tier ${tier})`,
+        before: { status: payment.status },
+        after: {
+          status: ManualPaymentStatus.APPROVED,
+          userId: targetUser.id,
+          durationDays,
+          expiresAt,
+        },
+      }).catch(() => null);
+
+      if (discordClient && targetUser.discordId) {
+        await this.roleSync.syncUserRoles(targetUser.id, discordClient).catch(() => null);
+      }
+
+      return { payment: updatedPayment, user: targetUser };
+    }
+
     // 1. Find or create the verified student User in database
     let targetUser = payment.user;
 
-    if (!targetUser) {
-      targetUser = await this.db.user.findFirst({
-        where: {
-          OR: [
-            { email: payment.email },
-            ...(payment.discordId ? [{ discordId: payment.discordId }] : []),
-          ],
-        },
-      });
-    }
+    try {
+      if (!targetUser) {
+        targetUser = await this.db.user.findFirst({
+          where: {
+            OR: [
+              { email: payment.email },
+              ...(payment.discordId ? [{ discordId: payment.discordId }] : []),
+            ],
+          },
+        });
+      }
 
-    if (!targetUser) {
-      // Create new student record
-      targetUser = await this.db.user.create({
-        data: {
+      let updatedPayment: any;
+      try {
+        if (!targetUser) {
+          targetUser = await this.db.user.create({
+            data: {
+              email: payment.email,
+              discordId: payment.discordId || null,
+              accountId: `manual_acc_${Date.now()}`,
+              subscriptionStatus: SubscriptionStatus.ACTIVE,
+              subscriptionExpiresAt: expiresAt,
+              currentTier: tier,
+            },
+          });
+        } else {
+          targetUser = await this.db.user.update({
+            where: { id: targetUser.id },
+            data: {
+              subscriptionStatus: SubscriptionStatus.ACTIVE,
+              subscriptionExpiresAt: expiresAt,
+              currentTier: Math.max(targetUser.currentTier, tier),
+              discordId: payment.discordId || targetUser.discordId,
+            },
+          });
+        }
+
+        const providerRef = `manual_${payment.transactionId}`;
+        await this.db.subscription.upsert({
+          where: { providerRef },
+          create: {
+            userId: targetUser.id,
+            plan: `manual_access_${durationDays}d`,
+            status: SubscriptionStatus.ACTIVE,
+            providerRef,
+            startedAt: new Date(),
+            expiresAt,
+            renewedAt: new Date(),
+          },
+          update: {
+            status: SubscriptionStatus.ACTIVE,
+            expiresAt,
+            renewedAt: new Date(),
+          },
+        });
+
+        updatedPayment = await this.db.manualPayment.update({
+          where: { id: paymentId },
+          data: {
+            status: ManualPaymentStatus.APPROVED,
+            reviewedBy: params.adminId,
+            reviewedAt: new Date(),
+            userId: targetUser.id,
+          },
+        });
+      } catch {
+        updatedPayment = localStore.updatePaymentStatus(paymentId, ManualPaymentStatus.APPROVED, params.adminId);
+        targetUser = targetUser || {
+          id: `usr_${Date.now()}`,
           email: payment.email,
           discordId: payment.discordId || null,
-          accountId: `manual_acc_${Date.now()}`,
-          subscriptionStatus: SubscriptionStatus.ACTIVE,
-          subscriptionExpiresAt: expiresAt,
           currentTier: tier,
-        },
-      });
-    } else {
-      // Update existing student record
-      targetUser = await this.db.user.update({
-        where: { id: targetUser.id },
-        data: {
           subscriptionStatus: SubscriptionStatus.ACTIVE,
-          subscriptionExpiresAt: expiresAt,
-          currentTier: Math.max(targetUser.currentTier, tier),
-          discordId: payment.discordId || targetUser.discordId,
-        },
-      });
-    }
-
-    // 2. Create / Upsert Subscription record
-    const providerRef = `manual_${payment.transactionId}`;
-    await this.db.subscription.upsert({
-      where: { providerRef },
-      create: {
-        userId: targetUser.id,
-        plan: `manual_access_${durationDays}d`,
-        status: SubscriptionStatus.ACTIVE,
-        providerRef,
-        startedAt: new Date(),
-        expiresAt,
-        renewedAt: new Date(),
-      },
-      update: {
-        status: SubscriptionStatus.ACTIVE,
-        expiresAt,
-        renewedAt: new Date(),
-      },
-    });
-
-    // 3. Mark ManualPayment as APPROVED
-    const updatedPayment = await this.db.manualPayment.update({
-      where: { id: paymentId },
-      data: {
-        status: ManualPaymentStatus.APPROVED,
-        reviewedBy: params.adminId,
-        reviewedAt: new Date(),
-        userId: targetUser.id,
-      },
-    });
-
-    // 4. Record in Audit Log
-    await this.auditor.log({
-      actorType: 'ADMIN',
-      actorId: params.adminId,
-      action: 'MANUAL_PAYMENT_APPROVED',
-      targetType: 'MANUAL_PAYMENT',
-      targetId: paymentId,
-      reason: params.notes || `Manual payment of $${payment.amount} approved for ${durationDays} days (Tier ${tier})`,
-      before: { status: payment.status },
-      after: {
-        status: ManualPaymentStatus.APPROVED,
-        userId: targetUser.id,
-        durationDays,
-        expiresAt,
-      },
-    });
-
-    logger.info(
-      { paymentId, userId: targetUser.id, admin: params.adminId },
-      'Manual payment approved. Subscription activated in database.'
-    );
-
-    // 5. Trigger immediate Discord role synchronization
-    if (discordClient && targetUser.discordId) {
-      await this.roleSync.syncUserRoles(targetUser.id, discordClient).catch(err => {
-        logger.error({ err, userId: targetUser?.id }, 'Failed to trigger Discord role sync after manual approval');
-      });
-
-      // Send confirmation DM to student
-      try {
-        const discordUser = await discordClient.users.fetch(targetUser.discordId).catch(() => null);
-        if (discordUser) {
-          const embed = new EmbedBuilder()
-            .setTitle('🎉 Payment Verified & Access Activated!')
-            .setColor(COLORS.SUCCESS)
-            .setDescription(
-              `Hello **${payment.studentName}**, your payment proof of **$${payment.amount.toFixed(2)}** (Tx: \`${payment.transactionId}\`) has been **approved** by staff!\n\n` +
-              `• **Membership:** Premium Active (${durationDays} days)\n` +
-              `• **Tier Access:** Tier ${tier}\n` +
-              `• **Expires:** <t:${Math.floor(expiresAt.getTime() / 1000)}:F>\n\n` +
-              `Your Discord roles have been synchronized automatically. Use \`/subscription\` or \`/continue\` to begin learning!`
-            )
-            .setFooter(EMBED_FOOTER)
-            .setTimestamp();
-
-          await discordUser.send({ embeds: [embed] }).catch(() => {});
-        }
-      } catch {
-        // Ignore DM failure
+        };
       }
-    }
 
-    return {
-      payment: updatedPayment,
-      user: targetUser,
-    };
+      // 4. Record in Audit Log
+      await this.auditor.log({
+        actorType: 'ADMIN',
+        actorId: params.adminId,
+        action: 'MANUAL_PAYMENT_APPROVED',
+        targetType: 'MANUAL_PAYMENT',
+        targetId: paymentId,
+        reason: params.notes || `Manual payment of $${payment.amount} approved for ${durationDays} days (Tier ${tier})`,
+        before: { status: payment.status },
+        after: {
+          status: ManualPaymentStatus.APPROVED,
+          userId: targetUser.id,
+          durationDays,
+          expiresAt,
+        },
+      }).catch(() => null);
+
+      logger.info(
+        { paymentId, userId: targetUser.id, admin: params.adminId },
+        'Manual payment approved.'
+      );
+
+      // 5. Trigger immediate Discord role synchronization
+      if (discordClient && targetUser.discordId) {
+        await this.roleSync.syncUserRoles(targetUser.id, discordClient).catch(err => {
+          logger.error({ err, userId: targetUser?.id }, 'Failed to trigger Discord role sync after manual approval');
+        });
+
+        // Send confirmation DM to student
+        try {
+          const discordUser = await discordClient.users.fetch(targetUser.discordId).catch(() => null);
+          if (discordUser) {
+            const embed = new EmbedBuilder()
+              .setTitle('🎉 Payment Verified & Access Activated!')
+              .setColor(COLORS.SUCCESS)
+              .setDescription(
+                `Hello **${payment.studentName}**, your payment proof of **$${payment.amount.toFixed(2)}** (Tx: \`${payment.transactionId}\`) has been **approved** by staff!\n\n` +
+                `• **Membership:** Premium Active (${durationDays} days)\n` +
+                `• **Tier Access:** Tier ${tier}\n` +
+                `• **Expires:** <t:${Math.floor(expiresAt.getTime() / 1000)}:F>\n\n` +
+                `Your Discord roles have been synchronized automatically. Use \`/subscription\` or \`/continue\` to begin learning!`
+              )
+              .setFooter(EMBED_FOOTER)
+              .setTimestamp();
+
+            await discordUser.send({ embeds: [embed] }).catch(() => {});
+          }
+        } catch {
+          // Ignore DM failure
+        }
+      }
+
+      return {
+        payment: updatedPayment,
+        user: targetUser,
+      };
+    } catch (err: any) {
+      throw err;
+    }
   }
 
   /**
    * Rejects a manual payment proof with feedback note
    */
   async rejectPayment(paymentId: string, params: RejectPaymentDto) {
-    const payment = await this.db.manualPayment.findUnique({
-      where: { id: paymentId },
-    });
+    let payment: any = null;
+    if (this.isOffline()) {
+      payment = localStore.findPaymentById(paymentId);
+    } else {
+      try {
+        payment = await this.db.manualPayment.findUnique({
+          where: { id: paymentId },
+        });
+      } catch {
+        payment = localStore.findPaymentById(paymentId);
+      }
+    }
 
     if (!payment) {
       throw new Error(`Manual payment with ID "${paymentId}" not found`);
@@ -357,15 +510,30 @@ export class ManualPaymentService {
       throw new Error('Cannot reject a payment that has already been approved');
     }
 
-    const updated = await this.db.manualPayment.update({
-      where: { id: paymentId },
-      data: {
-        status: ManualPaymentStatus.REJECTED,
-        reviewedBy: params.adminId,
-        reviewedAt: new Date(),
-        rejectionReason: params.reason,
-      },
-    });
+    let updated: any;
+    if (this.isOffline()) {
+      updated = localStore.updatePaymentStatus(paymentId, ManualPaymentStatus.REJECTED, params.adminId, params.reason);
+      if (!updated) {
+        updated = { id: paymentId, status: ManualPaymentStatus.REJECTED };
+      }
+    } else {
+      try {
+        updated = await this.db.manualPayment.update({
+          where: { id: paymentId },
+          data: {
+            status: ManualPaymentStatus.REJECTED,
+            reviewedBy: params.adminId,
+            reviewedAt: new Date(),
+            rejectionReason: params.reason,
+          },
+        });
+      } catch {
+        updated = localStore.updatePaymentStatus(paymentId, ManualPaymentStatus.REJECTED, params.adminId, params.reason);
+        if (!updated) {
+          updated = { id: paymentId, status: ManualPaymentStatus.REJECTED };
+        }
+      }
+    }
 
     await this.auditor.log({
       actorType: 'ADMIN',
@@ -376,7 +544,7 @@ export class ManualPaymentService {
       reason: params.reason,
       before: { status: payment.status },
       after: { status: ManualPaymentStatus.REJECTED, reason: params.reason },
-    });
+    }).catch(() => null);
 
     logger.info({ paymentId, admin: params.adminId }, 'Manual payment proof rejected');
     return updated;

@@ -1,6 +1,7 @@
 import { PrismaClient, PaymentMethod, ActorType } from '@prisma/client';
-import { prisma as defaultPrisma } from '../db/client.js';
+import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
 import { auditService as defaultAuditService, AuditService } from './audit.service.js';
+import { localStore } from '../db/local-store.js';
 
 export interface CreatePaymentMethodInput {
   title: string;
@@ -33,32 +34,59 @@ export class PaymentMethodService {
     this.auditor = auditor;
   }
 
+  private isOffline(): boolean {
+    return this.db === defaultPrisma && !isDatabaseOnline();
+  }
+
   /**
    * List all active payment methods for student checkout / proof submission
    */
   async listActiveMethods(): Promise<PaymentMethod[]> {
-    return this.db.paymentMethod.findMany({
-      where: { active: true },
-      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
-    });
+    if (this.isOffline()) {
+      return localStore.getPaymentMethods(true);
+    }
+    try {
+      return await this.db.paymentMethod.findMany({
+        where: { active: true },
+        orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+      });
+    } catch {
+      return localStore.getPaymentMethods(true);
+    }
   }
 
   /**
    * List all payment methods for admin management
    */
   async listAllMethods(): Promise<PaymentMethod[]> {
-    return this.db.paymentMethod.findMany({
-      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
-    });
+    if (this.isOffline()) {
+      return localStore.getPaymentMethods(false);
+    }
+    try {
+      return await this.db.paymentMethod.findMany({
+        orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+      });
+    } catch {
+      return localStore.getPaymentMethods(false);
+    }
   }
 
   /**
    * Get single payment method by ID
    */
   async getMethodById(id: string): Promise<PaymentMethod | null> {
-    return this.db.paymentMethod.findUnique({
-      where: { id },
-    });
+    if (this.isOffline()) {
+      const all = localStore.getPaymentMethods(false);
+      return all.find(m => m.id === id) || null;
+    }
+    try {
+      return await this.db.paymentMethod.findUnique({
+        where: { id },
+      });
+    } catch {
+      const all = localStore.getPaymentMethods(false);
+      return all.find(m => m.id === id) || null;
+    }
   }
 
   /**
@@ -72,8 +100,11 @@ export class PaymentMethodService {
       throw new Error('Account number or wallet address is required');
     }
 
-    const method = await this.db.paymentMethod.create({
-      data: {
+    let method: PaymentMethod;
+
+    if (this.isOffline()) {
+      method = {
+        id: `pm_${Date.now()}`,
         title: input.title.trim(),
         accountName: input.accountName?.trim() || null,
         accountNumber: input.accountNumber.trim(),
@@ -81,8 +112,39 @@ export class PaymentMethodService {
         instructions: input.instructions?.trim() || null,
         active: input.active !== undefined ? input.active : true,
         orderIndex: input.orderIndex !== undefined ? input.orderIndex : 0,
-      },
-    });
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      localStore.savePaymentMethod(method);
+    } else {
+      try {
+        method = await this.db.paymentMethod.create({
+          data: {
+            title: input.title.trim(),
+            accountName: input.accountName?.trim() || null,
+            accountNumber: input.accountNumber.trim(),
+            qrCodeUrl: input.qrCodeUrl || null,
+            instructions: input.instructions?.trim() || null,
+            active: input.active !== undefined ? input.active : true,
+            orderIndex: input.orderIndex !== undefined ? input.orderIndex : 0,
+          },
+        });
+      } catch {
+        method = {
+          id: `pm_${Date.now()}`,
+          title: input.title.trim(),
+          accountName: input.accountName?.trim() || null,
+          accountNumber: input.accountNumber.trim(),
+          qrCodeUrl: input.qrCodeUrl || null,
+          instructions: input.instructions?.trim() || null,
+          active: input.active !== undefined ? input.active : true,
+          orderIndex: input.orderIndex !== undefined ? input.orderIndex : 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        localStore.savePaymentMethod(method);
+      }
+    }
 
     await this.auditor.log({
       actorType: ActorType.ADMIN,
@@ -104,49 +166,96 @@ export class PaymentMethodService {
    * Update an existing payment method
    */
   async updateMethod(id: string, input: UpdatePaymentMethodInput): Promise<PaymentMethod> {
-    const existing = await this.db.paymentMethod.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Payment method with ID ${id} not found`);
+    if (this.isOffline()) {
+      const all = localStore.getPaymentMethods(false);
+      const existing = all.find(m => m.id === id);
+      if (!existing) {
+        throw new Error(`Payment method with ID ${id} not found`);
+      }
+      if (input.title !== undefined) existing.title = input.title.trim();
+      if (input.accountName !== undefined) existing.accountName = input.accountName?.trim() || null;
+      if (input.accountNumber !== undefined) existing.accountNumber = input.accountNumber.trim();
+      if (input.qrCodeUrl !== undefined) existing.qrCodeUrl = input.qrCodeUrl || null;
+      if (input.instructions !== undefined) existing.instructions = input.instructions?.trim() || null;
+      if (input.active !== undefined) existing.active = input.active;
+      existing.updatedAt = new Date();
+      return localStore.savePaymentMethod(existing);
     }
 
-    const updated = await this.db.paymentMethod.update({
-      where: { id },
-      data: {
-        title: input.title !== undefined ? input.title.trim() : undefined,
-        accountName: input.accountName !== undefined ? (input.accountName ? input.accountName.trim() : null) : undefined,
-        accountNumber: input.accountNumber !== undefined ? input.accountNumber.trim() : undefined,
-        qrCodeUrl: input.qrCodeUrl !== undefined ? input.qrCodeUrl : undefined,
-        instructions: input.instructions !== undefined ? (input.instructions ? input.instructions.trim() : null) : undefined,
-        active: input.active !== undefined ? input.active : undefined,
-        orderIndex: input.orderIndex !== undefined ? input.orderIndex : undefined,
-      },
-    });
+    try {
+      const existing = await this.db.paymentMethod.findUnique({ where: { id } });
+      if (!existing) {
+        throw new Error(`Payment method with ID ${id} not found`);
+      }
 
-    await this.auditor.log({
-      actorType: ActorType.ADMIN,
-      action: 'PAYMENT_METHOD_UPDATED',
-      actorId: input.adminId || 'admin',
-      targetType: 'PAYMENT_METHOD',
-      targetId: id,
-      after: { changes: input as any },
-    }).catch(() => null);
+      const updated = await this.db.paymentMethod.update({
+        where: { id },
+        data: {
+          title: input.title !== undefined ? input.title.trim() : undefined,
+          accountName: input.accountName !== undefined ? (input.accountName ? input.accountName.trim() : null) : undefined,
+          accountNumber: input.accountNumber !== undefined ? input.accountNumber.trim() : undefined,
+          qrCodeUrl: input.qrCodeUrl !== undefined ? input.qrCodeUrl : undefined,
+          instructions: input.instructions !== undefined ? (input.instructions ? input.instructions.trim() : null) : undefined,
+          active: input.active !== undefined ? input.active : undefined,
+          orderIndex: input.orderIndex !== undefined ? input.orderIndex : undefined,
+        },
+      });
 
-    return updated;
+      return updated;
+    } catch {
+      const all = localStore.getPaymentMethods(false);
+      const existing = all.find(m => m.id === id);
+      if (!existing) {
+        throw new Error(`Payment method with ID ${id} not found`);
+      }
+      if (input.title !== undefined) existing.title = input.title.trim();
+      if (input.accountName !== undefined) existing.accountName = input.accountName?.trim() || null;
+      if (input.accountNumber !== undefined) existing.accountNumber = input.accountNumber.trim();
+      if (input.qrCodeUrl !== undefined) existing.qrCodeUrl = input.qrCodeUrl || null;
+      if (input.instructions !== undefined) existing.instructions = input.instructions?.trim() || null;
+      if (input.active !== undefined) existing.active = input.active;
+      existing.updatedAt = new Date();
+      return localStore.savePaymentMethod(existing);
+    }
   }
 
   /**
    * Toggle active status of a payment method
    */
   async toggleStatus(id: string, adminId?: string): Promise<PaymentMethod> {
-    const existing = await this.db.paymentMethod.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Payment method with ID ${id} not found`);
-    }
+    let updated: PaymentMethod;
 
-    const updated = await this.db.paymentMethod.update({
-      where: { id },
-      data: { active: !existing.active },
-    });
+    if (this.isOffline()) {
+      const all = localStore.getPaymentMethods(false);
+      const existing = all.find(m => m.id === id);
+      if (!existing) {
+        throw new Error(`Payment method with ID ${id} not found`);
+      }
+      existing.active = !existing.active;
+      existing.updatedAt = new Date();
+      updated = localStore.savePaymentMethod(existing);
+    } else {
+      try {
+        const existing = await this.db.paymentMethod.findUnique({ where: { id } });
+        if (!existing) {
+          throw new Error(`Payment method with ID ${id} not found`);
+        }
+
+        updated = await this.db.paymentMethod.update({
+          where: { id },
+          data: { active: !existing.active },
+        });
+      } catch {
+        const all = localStore.getPaymentMethods(false);
+        const existing = all.find(m => m.id === id);
+        if (!existing) {
+          throw new Error(`Payment method with ID ${id} not found`);
+        }
+        existing.active = !existing.active;
+        existing.updatedAt = new Date();
+        updated = localStore.savePaymentMethod(existing);
+      }
+    }
 
     await this.auditor.log({
       actorType: ActorType.ADMIN,
@@ -164,14 +273,30 @@ export class PaymentMethodService {
    * Delete a payment method
    */
   async deleteMethod(id: string, adminId?: string): Promise<PaymentMethod> {
-    const existing = await this.db.paymentMethod.findUnique({ where: { id } });
-    if (!existing) {
-      throw new Error(`Payment method with ID ${id} not found`);
-    }
+    let deleted: PaymentMethod | null = null;
 
-    const deleted = await this.db.paymentMethod.delete({
-      where: { id },
-    });
+    if (this.isOffline()) {
+      deleted = localStore.deletePaymentMethod(id);
+      if (!deleted) {
+        throw new Error(`Payment method with ID ${id} not found`);
+      }
+    } else {
+      try {
+        const existing = await this.db.paymentMethod.findUnique({ where: { id } });
+        if (!existing) {
+          throw new Error(`Payment method with ID ${id} not found`);
+        }
+
+        deleted = await this.db.paymentMethod.delete({
+          where: { id },
+        });
+      } catch {
+        deleted = localStore.deletePaymentMethod(id);
+        if (!deleted) {
+          throw new Error(`Payment method with ID ${id} not found`);
+        }
+      }
+    }
 
     await this.auditor.log({
       actorType: ActorType.ADMIN,

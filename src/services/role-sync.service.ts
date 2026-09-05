@@ -1,10 +1,11 @@
 import { Client, Guild, GuildMember } from 'discord.js';
 import { PrismaClient, SubscriptionStatus } from '@prisma/client';
-import { prisma as defaultPrisma } from '../db/client.js';
+import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
 import { env } from '../config/env.js';
 import { auditService } from './audit.service.js';
 import { logger } from '../utils/logger.js';
 import { TIER_LEVELS } from '../config/constants.js';
+import { localStore } from '../db/local-store.js';
 
 export interface SyncResult {
   userId: string;
@@ -76,7 +77,17 @@ export class RoleSyncService {
    * Completely idempotent: running twice in a row causes 0 role mutations on the second run.
    */
   async syncUserRoles(userId: string, client: Client): Promise<SyncResult | null> {
-    const user = await this.db.user.findUnique({ where: { id: userId } });
+    let user: any = null;
+    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+      user = localStore.getUsers().find(u => u.id === userId);
+    } else {
+      try {
+        user = await this.db.user.findUnique({ where: { id: userId } });
+      } catch {
+        user = localStore.getUsers().find(u => u.id === userId);
+      }
+    }
+
     if (!user || !user.discordId) {
       return null;
     }

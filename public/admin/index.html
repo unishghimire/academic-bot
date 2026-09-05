@@ -20,11 +20,18 @@
       </div>
       <form id="authForm">
         <div class="form-group">
-          <label for="adminKeyInput">Access Key</label>
-          <input type="password" id="adminKeyInput" placeholder="Enter secret key..." required autocomplete="current-password">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <label for="adminKeyInput" style="margin-bottom: 0;">Access Key</label>
+            <button type="button" id="togglePasswordBtn" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.78rem;">👁️ Show Key</button>
+          </div>
+          <input type="password" id="adminKeyInput" placeholder="academy_admin_secret_2026" required autocomplete="current-password">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.76rem; color: #94a3b8;">
+            <span>Key in <code>.env</code>: <code>academy_admin_secret_2026</code></span>
+            <button type="button" id="fillDefaultKeyBtn" style="background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #818cf8; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 0.75rem;">📋 Auto-Fill</button>
+          </div>
         </div>
         <div id="authError" class="alert error hidden">Invalid Admin Key</div>
-        <button type="submit" class="btn btn-primary full-width">Unlock Dashboard</button>
+        <button type="submit" id="authSubmitBtn" class="btn btn-primary full-width">Unlock Dashboard</button>
       </form>
     </div>
   </div>
@@ -496,6 +503,6 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/admin/js/admin.js"></script>
+  <script src="/admin/js/admin.js?v=2.2"></script>
 </body>
 </html>

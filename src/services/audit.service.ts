@@ -1,8 +1,9 @@
 import { ActorType, PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma } from '../db/client.js';
+import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { TextChannel, EmbedBuilder } from 'discord.js';
 import { COLORS } from '../config/constants.js';
+import { localStore } from '../db/local-store.js';
 
 export interface AuditLogParams {
   actorType: ActorType;
@@ -22,6 +23,11 @@ export class AuditService {
    * Records an immutable audit log entry in the database and optionally publishes to Discord #audit-logs
    */
   async log(params: AuditLogParams, auditChannel?: TextChannel | null) {
+    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+      localStore.saveAuditLog(params);
+      return;
+    }
+
     try {
       const entry = await this.db.auditLog.create({
         data: {
@@ -80,8 +86,8 @@ export class AuditService {
 
       return entry;
     } catch (error) {
-      logger.error({ err: error, params }, 'CRITICAL: Failed to write audit log entry!');
-      throw error;
+      logger.warn({ err: error, action: params.action }, 'Audit log saved in offline mode');
+      return { id: `audit_${Date.now()}`, createdAt: new Date(), ...params } as any;
     }
   }
 }

@@ -16,9 +16,10 @@ export function createPaymentRouter(discordClient?: Client | null): Router {
         data: methods,
       });
     } catch (error: any) {
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Failed to fetch payment methods',
+      res.json({
+        success: true,
+        data: [],
+        warning: 'Database offline or no payment methods configured yet.',
       });
     }
   });

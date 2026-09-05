@@ -7,16 +7,10 @@ import { logger } from './utils/logger.js';
 async function main() {
   logger.info('🚀 Bootstrapping Custom Academy Bot & Backend System...');
 
-  // 1. Check PostgreSQL Database connection
-  const dbConnected = await checkDbConnection();
-  if (!dbConnected) {
-    logger.warn('⚠️ PostgreSQL connection failed. Please ensure DATABASE_URL is configured.');
-  }
-
-  // 2. Initialize Discord Bot Client
+  // 1. Initialize Discord Bot Client
   const discordClient = createDiscordClient();
 
-  // 3. Initialize & Start API Server
+  // 2. Initialize & Start API Server immediately
   const app = createApiServer(discordClient);
   const server = app.listen(env.PORT, () => {
     logger.info(`🌐 Academy Control Center: http://localhost:${env.PORT}/admin`);
@@ -28,8 +22,15 @@ async function main() {
     }
   });
 
-  // 4. Start Discord Bot
+  // 3. Start Discord Bot
   await startBot(discordClient);
+
+  // 4. Verify PostgreSQL Database connection in background
+  checkDbConnection().then(dbConnected => {
+    if (!dbConnected) {
+      logger.warn('⚠️ PostgreSQL connection failed. Please ensure valid password in DATABASE_URL in .env.');
+    }
+  }).catch(() => {});
 
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
@@ -43,6 +44,14 @@ async function main() {
     }
     process.exit(0);
   };
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ reason }, 'Unhandled promise rejection');
+  });
+
+  process.on('uncaughtException', (err) => {
+    logger.error({ err }, 'Uncaught exception');
+  });
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));

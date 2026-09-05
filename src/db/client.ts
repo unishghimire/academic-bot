@@ -19,13 +19,21 @@ if (process.env.NODE_ENV !== 'production') {
   global.prisma = prisma;
 }
 
+let isDbOnline = false;
+
+export function isDatabaseOnline(): boolean {
+  return isDbOnline;
+}
+
 export async function checkDbConnection(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;
+    isDbOnline = true;
     logger.info('✅ Database connection established successfully.');
     return true;
   } catch (error) {
-    logger.error({ err: error }, '❌ Failed to connect to PostgreSQL database.');
+    isDbOnline = false;
+    logger.warn('⚠️ PostgreSQL database offline. System active in local resilient storage mode.');
     return false;
   }
 }
