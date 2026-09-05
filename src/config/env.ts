@@ -35,9 +35,9 @@ const envSchema = z.object({
   CHANNEL_AUDIT_LOGS: z.string().optional(),
 
   // Backend / Platform
-  ACADEMY_API_SECRET: z.string().default('academy_local_secret_key_123'),
+  ACADEMY_API_SECRET: z.string({ required_error: 'ACADEMY_API_SECRET must be set (shared secret for course website API calls)' }),
   ACADEMY_WEBSITE_URL: z.string().default('https://academy.example.com'),
-  ADMIN_PANEL_KEY: z.string().default('academy_admin_secret_2026'),
+  ADMIN_PANEL_KEY: z.string({ required_error: 'ADMIN_PANEL_KEY must be set (strong random admin panel access key)' }).min(16, 'ADMIN_PANEL_KEY must be at least 16 characters'),
 
   // Stripe (Optional - Admin QR Manual Payments used by default)
   STRIPE_SECRET_KEY: z.string().optional(),
