@@ -19,10 +19,13 @@ async function main() {
   // 3. Initialize & Start API Server
   const app = createApiServer(discordClient);
   const server = app.listen(env.PORT, () => {
-    logger.info(`🌐 Webhook & API server listening on http://localhost:${env.PORT}`);
-    logger.info(`📡 Stripe Webhook endpoint: http://localhost:${env.PORT}/webhooks/stripe`);
+    logger.info(`🌐 Academy Control Center: http://localhost:${env.PORT}/admin`);
+    logger.info(`💳 Student Payment Portal: http://localhost:${env.PORT}/submit-proof.html`);
     logger.info(`📡 Video Progress API: http://localhost:${env.PORT}/api/progress/watch`);
     logger.info(`📡 Account Linking API: http://localhost:${env.PORT}/api/link/verify`);
+    if (env.STRIPE_SECRET_KEY) {
+      logger.info(`📡 Stripe Webhook: http://localhost:${env.PORT}/webhooks/stripe`);
+    }
   });
 
   // 4. Start Discord Bot

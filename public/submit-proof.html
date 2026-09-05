@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Submit Manual Payment Proof • Premium AI Video Ads Academy</title>
+  <title>Manual Payment & QR Checkout • The Elite Circle Academy</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,19 +13,50 @@
   <div class="background-glow"></div>
   <div class="page-container">
     <header class="header">
-      <div class="badge">Academy Payment Verification</div>
-      <h1>Submit Manual Payment Proof</h1>
-      <p class="subtitle">Complete the form below with your offline/direct transaction details. Our staff reviews and activates your membership in the database within minutes.</p>
+      <div class="badge">Official Academy Payment</div>
+      <h1>Direct Payment & QR Checkout</h1>
+      <p class="subtitle">Scan the QR code or copy the official account details below. After completing your transfer, submit your receipt details for instant staff verification and automated Discord role activation.</p>
     </header>
 
+    <!-- STEP 1: PAYMENT METHODS & QR CODES -->
+    <section class="section-card">
+      <div class="section-header">
+        <div class="step-indicator">STEP 1</div>
+        <div>
+          <h2>Choose Payment Method & Scan QR Code</h2>
+          <p class="section-sub">Select your preferred payment method below. Scan the QR code or copy the account details.</p>
+        </div>
+      </div>
+
+      <div id="methodsLoading" class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading available payment methods...</span>
+      </div>
+
+      <div id="methodsContainer" class="methods-grid hidden"></div>
+
+      <div id="noMethodsAlert" class="empty-methods-note hidden">
+        <p>💡 <em>Direct transfer methods are currently being configured by the admin. You may still submit your payment reference details below.</em></p>
+      </div>
+    </section>
+
+    <!-- STEP 2: PROOF SUBMISSION FORM -->
     <div class="card form-card">
+      <div class="section-header">
+        <div class="step-indicator">STEP 2</div>
+        <div>
+          <h2>Submit Payment Verification</h2>
+          <p class="section-sub">Enter the sender information and transaction reference from your transfer receipt.</p>
+        </div>
+      </div>
+
       <form id="paymentProofForm">
         <div class="form-grid">
           <!-- Student Full Name -->
           <div class="form-group">
             <label for="studentName">Student Full Name <span class="required">*</span></label>
             <input type="text" id="studentName" name="studentName" placeholder="e.g. Alex Morgan" required autocomplete="name">
-            <span class="field-hint">Your full legal or account name</span>
+            <span class="field-hint">Your full name</span>
           </div>
 
           <!-- Contact Phone Number -->
@@ -44,9 +75,9 @@
 
           <!-- Discord User ID or Username -->
           <div class="form-group">
-            <label for="discordId">Discord Username or User ID <span class="optional">(Optional)</span></label>
+            <label for="discordId">Discord Username or User ID <span class="optional">(Recommended)</span></label>
             <input type="text" id="discordId" name="discordId" placeholder="e.g. alex_videoads or 1849204910293847">
-            <span class="field-hint">Enables instant automated role assignment</span>
+            <span class="field-hint">Enables instant automated role assignment upon approval</span>
           </div>
 
           <!-- Payment Method -->
@@ -54,25 +85,26 @@
             <label for="paymentMethod">Payment Method Used <span class="required">*</span></label>
             <select id="paymentMethod" name="paymentMethod" required>
               <option value="" disabled selected>Select payment method...</option>
-              <option value="Bank Wire / Direct Transfer">Bank Wire / Direct Transfer</option>
-              <option value="Zelle / Venmo">Zelle / Venmo</option>
-              <option value="Mobile Wallet (Esewa / bKash / JazzCash)">Mobile Wallet (Esewa / bKash / JazzCash)</option>
-              <option value="Crypto (USDT / USDC)">Crypto (USDT / USDC)</option>
-              <option value="Cash / In-Person">Cash / In-Person Deposit</option>
-              <option value="Other Provider">Other Direct Provider</option>
+              <option value="eSewa Mobile Wallet">eSewa Mobile Wallet</option>
+              <option value="Khalti / IME Pay">Khalti / IME Pay</option>
+              <option value="Bank Direct Wire Transfer">Bank Direct Wire Transfer</option>
+              <option value="Zelle / Venmo / CashApp">Zelle / Venmo / CashApp</option>
+              <option value="Crypto USDT / USDC">Crypto (USDT / USDC)</option>
+              <option value="Cash / In-Person Deposit">Cash / In-Person Deposit</option>
+              <option value="Other Method">Other Method</option>
             </select>
           </div>
 
           <!-- Transaction ID / Reference -->
           <div class="form-group">
-            <label for="transactionId">Transaction Reference / Number <span class="required">*</span></label>
+            <label for="transactionId">Transaction Reference / ID <span class="required">*</span></label>
             <input type="text" id="transactionId" name="transactionId" placeholder="e.g. TXN-984210492" required>
-            <span class="field-hint">The bank transfer ref, receipt ID, or mobile confirmation number</span>
+            <span class="field-hint">The bank reference, wallet transaction ID, or bill number</span>
           </div>
 
           <!-- Amount Paid -->
           <div class="form-group">
-            <label for="amount">Amount Paid (USD) <span class="required">*</span></label>
+            <label for="amount">Amount Paid <span class="required">*</span></label>
             <div class="input-currency-wrapper">
               <span class="currency-symbol">$</span>
               <input type="number" id="amount" name="amount" step="0.01" min="1" placeholder="49.00" required>
@@ -80,18 +112,33 @@
             <span class="field-hint">Exact amount sent according to receipt</span>
           </div>
 
-          <!-- Proof / Receipt URL -->
+          <!-- Receipt Proof (File or URL) -->
           <div class="form-group">
-            <label for="proofUrl">Receipt URL / Screenshot Link <span class="optional">(Recommended)</span></label>
-            <input type="url" id="proofUrl" name="proofUrl" placeholder="https://imgur.com/... or Google Drive link">
-            <span class="field-hint">Public link to receipt image or PDF bank slip</span>
+            <label>Payment Receipt / Screenshot <span class="required">*</span></label>
+            <div class="upload-options">
+              <div class="file-drop-zone" id="dropZone">
+                <input type="file" id="receiptFileInput" accept="image/*" class="file-input-hidden">
+                <div class="drop-zone-content" id="dropZoneContent">
+                  <span class="upload-icon">📸</span>
+                  <span class="drop-text">Click to browse or drop receipt screenshot</span>
+                  <span class="drop-sub">Supports PNG, JPG, WEBP</span>
+                </div>
+                <div id="receiptPreviewContainer" class="receipt-preview-box hidden">
+                  <img id="receiptPreviewImg" src="" alt="Receipt Preview">
+                  <button type="button" id="removeReceiptBtn" class="btn-remove-preview" title="Remove image">✕</button>
+                </div>
+              </div>
+              <div class="or-separator">or paste image link</div>
+              <input type="url" id="proofUrl" name="proofUrl" placeholder="https://imgur.com/... or Google Drive link">
+            </div>
+            <span class="field-hint">Upload receipt image directly or enter public image URL</span>
           </div>
         </div>
 
         <!-- Notes / Remarks -->
         <div class="form-group full-width">
           <label for="notes">Additional Remarks / Notes <span class="optional">(Optional)</span></label>
-          <textarea id="notes" name="notes" rows="3" placeholder="Add any details about sender bank, timestamp, or course plan..."></textarea>
+          <textarea id="notes" name="notes" rows="2" placeholder="Sender account name, transfer time, or special instructions..."></textarea>
         </div>
 
         <!-- Alert messages -->
@@ -110,7 +157,7 @@
       <div id="successCard" class="success-card hidden">
         <div class="success-icon">✅</div>
         <h2>Payment Proof Submitted!</h2>
-        <p class="success-desc">Thank you! Your payment proof has been successfully queued in the staff verification pipeline.</p>
+        <p class="success-desc">Thank you! Your payment proof has been submitted to our administrative verification team.</p>
         
         <div class="details-box">
           <div class="detail-row">
@@ -119,16 +166,16 @@
           </div>
           <div class="detail-row">
             <span>Current Status:</span>
-            <span class="status-pill pending">PENDING REVIEW</span>
+            <span class="status-pill pending">PENDING VERIFICATION</span>
           </div>
         </div>
 
         <div class="instructions-card">
           <h3>Next Steps:</h3>
           <ol>
-            <li>Make sure you are in the official <strong>Academy Discord server</strong>.</li>
-            <li>Run the command <code>/link</code> inside any channel to connect your Discord ID.</li>
-            <li>Once approved by our administrators, your <strong>@Premium</strong> and <strong>@Tier-1</strong> roles will unlock instantly!</li>
+            <li>Make sure you are in the official <strong>Academy Discord Server</strong>.</li>
+            <li>Run <code>/link</code> in Discord to connect your account.</li>
+            <li>Once our admin reviews and approves your receipt, your <strong>@Premium</strong> and <strong>@Tier-1</strong> roles are granted automatically!</li>
           </ol>
         </div>
 
@@ -137,7 +184,7 @@
     </div>
 
     <footer class="footer">
-      <p>Premium AI Video Ads Academy • Single Source of Truth Payment Pipeline</p>
+      <p>The Elite Circle Academy • Automated Discord Access Pipeline</p>
       <p><a href="/admin">Staff Admin Portal</a></p>
     </footer>
   </div>

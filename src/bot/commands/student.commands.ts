@@ -67,7 +67,7 @@ export const subscriptionCommand = {
       `**Current Tier:** **Tier ${user.currentTier}**\n` +
       `**Plan:** \`${latestSub?.plan || 'Standard'}\`\n` +
       `**Expires/Renews:** ${expiresDate}\n\n` +
-      `*Source of Truth: PostgreSQL Database. Synchronized via Stripe.*`
+      `*Source of Truth: PostgreSQL Database. Synchronized via Academy Admin Payments.*`
     );
 
     await interaction.editReply({ embeds: [embed] });

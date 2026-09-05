@@ -47,6 +47,11 @@
           <span class="nav-label">Manual Payments</span>
           <span id="pendingBadge" class="nav-badge hidden">0</span>
         </button>
+        <button class="nav-item" data-tab="methodsTab">
+          <span class="nav-icon">📱</span>
+          <span class="nav-label">QR Payment Methods</span>
+          <span id="methodsBadge" class="nav-badge hidden">0</span>
+        </button>
         <button class="nav-item" data-tab="studentsTab">
           <span class="nav-icon">👥</span>
           <span class="nav-label">Student Directory</span>
@@ -81,6 +86,9 @@
           <a href="/submit-proof.html" target="_blank" class="btn btn-secondary">
             <span>🔗 Student Form</span>
           </a>
+          <button id="openNewMethodBtn" class="btn btn-secondary">
+            <span>📱 Add QR Method</span>
+          </button>
           <button id="openDirectPaymentBtn" class="btn btn-primary">
             <span>➕ Record Direct Payment</span>
           </button>
@@ -214,6 +222,27 @@
               </tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- 4. QR Payment Methods Tab -->
+      <section id="methodsTab" class="tab-pane hidden">
+        <div class="table-card">
+          <div class="table-toolbar">
+            <div>
+              <h3>QR Code & Direct Payment Methods</h3>
+              <p class="toolbar-sub">Configure accounts, upload QR codes, and manage active methods displayed to students on checkout.</p>
+            </div>
+            <button id="addMethodBtn" class="btn btn-primary">
+              <span>➕ Add Payment Method</span>
+            </button>
+          </div>
+
+          <div id="methodsAdminLoading" class="empty-state">Loading payment methods...</div>
+          <div id="adminMethodsGrid" class="admin-methods-grid hidden"></div>
+          <div id="noAdminMethodsAlert" class="empty-state hidden">
+            <p>No payment methods configured yet. Click "Add Payment Method" to upload your first QR code and account details.</p>
+          </div>
         </div>
       </section>
     </main>
@@ -385,6 +414,83 @@
           <button type="submit" class="btn btn-primary">Update Tier</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Add / Edit Payment Method Modal -->
+  <div id="methodModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="methodModalTitle">Add New Payment Method & QR</h3>
+        <button class="modal-close" onclick="closeModal('methodModal')">&times;</button>
+      </div>
+      <form id="methodForm">
+        <input type="hidden" id="editMethodId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="methodTitleInput">Method Title *</label>
+            <input type="text" id="methodTitleInput" placeholder="e.g. eSewa Mobile Wallet, Bank Transfer, Zelle" required>
+          </div>
+          <div class="form-group">
+            <label for="methodAccountNameInput">Account Holder Name</label>
+            <input type="text" id="methodAccountNameInput" placeholder="e.g. The Elite Circle Academy">
+          </div>
+          <div class="form-group full-width">
+            <label for="methodAccountNumberInput">Account Number / Phone / Wallet Address *</label>
+            <input type="text" id="methodAccountNumberInput" placeholder="e.g. 9800000000 or IBAN / Wallet Address" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>QR Code Image</label>
+          <div class="upload-options">
+            <div class="file-drop-zone" id="adminQrDropZone">
+              <input type="file" id="adminQrFileInput" accept="image/*" class="file-input-hidden">
+              <div class="drop-zone-content" id="adminQrDropContent">
+                <span class="upload-icon">📷</span>
+                <span class="drop-text">Click or drop QR code image from your computer</span>
+                <span class="drop-sub">PNG, JPG, WEBP (stored securely)</span>
+              </div>
+              <div id="adminQrPreviewContainer" class="receipt-preview-box hidden">
+                <img id="adminQrPreviewImg" src="" alt="QR Preview">
+                <button type="button" id="adminQrRemoveBtn" class="btn-remove-preview" title="Remove QR">✕</button>
+              </div>
+            </div>
+            <div class="or-separator">or paste image URL</div>
+            <input type="url" id="methodQrUrlInput" placeholder="https://example.com/my-qr.png">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="methodInstructionsInput">Student Instructions / Remarks Note</label>
+          <textarea id="methodInstructionsInput" rows="2" placeholder="e.g. Please put your Discord username or registered email in payment remarks."></textarea>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="methodActiveCheckbox" checked>
+            <span>Active (Visible to students immediately on the payment portal)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('methodModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="saveMethodBtn">Save Payment Method</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Image Zoom Modal -->
+  <div id="imageZoomModal" class="modal-overlay hidden" onclick="closeModal('imageZoomModal')">
+    <div class="modal-card zoom-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="zoomTitle">Receipt / QR Preview</h3>
+        <button class="modal-close" onclick="closeModal('imageZoomModal')">&times;</button>
+      </div>
+      <div class="zoom-body">
+        <img id="zoomImage" src="" alt="Full view">
+      </div>
     </div>
   </div>
 

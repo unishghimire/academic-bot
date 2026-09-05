@@ -9,9 +9,14 @@ import { Client } from 'discord.js';
 
 export function createStripeRouter(discordClient?: Client | null): Router {
   const router = Router();
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+  const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
   router.post('/stripe', async (req: Request, res: Response) => {
+    if (!stripe || !env.STRIPE_WEBHOOK_SECRET) {
+      res.status(200).send('Stripe integration not configured. Manual payments are active.');
+      return;
+    }
+
     const sig = req.headers['stripe-signature'];
 
     let event: Stripe.Event;

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../../db/client.js';
 import { env } from '../../config/env.js';
 import { manualPaymentService } from '../../services/manual-payment.service.js';
+import { paymentMethodService } from '../../services/payment-method.service.js';
 import { tierEngine } from '../../services/tier-engine.service.js';
 import { roleSyncService } from '../../services/role-sync.service.js';
 import { auditService } from '../../services/audit.service.js';
@@ -277,6 +278,96 @@ export function createAdminRouter(discordClient?: Client | null): Router {
       res.json({ success: true, data: logs });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // 9. Payment Methods Management (Admin QR Uploads & Settings)
+  router.get('/payment-methods', async (_req: Request, res: Response) => {
+    try {
+      const methods = await paymentMethodService.listAllMethods();
+      res.json({ success: true, data: methods });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/payment-methods', async (req: Request, res: Response) => {
+    try {
+      const { title, accountName, accountNumber, qrCodeUrl, instructions, active, adminId } = req.body;
+      const created = await paymentMethodService.createMethod({
+        title,
+        accountName,
+        accountNumber,
+        qrCodeUrl,
+        instructions,
+        active: active !== undefined ? Boolean(active) : true,
+        adminId: adminId || 'admin',
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Payment method created successfully',
+        data: created,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  router.put('/payment-methods/:id', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      const { title, accountName, accountNumber, qrCodeUrl, instructions, active, orderIndex, adminId } = req.body;
+      const updated = await paymentMethodService.updateMethod(id, {
+        title,
+        accountName,
+        accountNumber,
+        qrCodeUrl,
+        instructions,
+        active,
+        orderIndex,
+        adminId: adminId || 'admin',
+      });
+
+      res.json({
+        success: true,
+        message: 'Payment method updated successfully',
+        data: updated,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  router.patch('/payment-methods/:id/toggle', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      const adminId = (req.body?.adminId as string) || 'admin';
+      const toggled = await paymentMethodService.toggleStatus(id, adminId);
+
+      res.json({
+        success: true,
+        message: `Payment method ${toggled.active ? 'activated' : 'deactivated'}`,
+        data: toggled,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  router.delete('/payment-methods/:id', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id;
+      const adminId = (req.query?.adminId as string) || 'admin';
+      const deleted = await paymentMethodService.deleteMethod(id, adminId);
+
+      res.json({
+        success: true,
+        message: 'Payment method deleted successfully',
+        data: deleted,
+      });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
     }
   });
 

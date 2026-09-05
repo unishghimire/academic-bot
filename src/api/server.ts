@@ -21,8 +21,9 @@ export function createApiServer(discordClient?: Client | null): Express {
     createStripeRouter(discordClient)
   );
 
-  // Standard JSON for all other API endpoints
-  app.use(express.json());
+  // Support up to 15MB JSON & form bodies for QR code and receipt image uploads
+  app.use(express.json({ limit: '15mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
   // Serve static UI assets (Admin Panel & Payment Proof portal)
   app.use(express.static(path.join(process.cwd(), 'public')));

@@ -1,6 +1,8 @@
 let currentAdminKey = sessionStorage.getItem('academy_admin_key') || '';
 let currentFilter = 'PENDING';
 let paymentsData = [];
+let adminMethodsData = [];
+let uploadedAdminQrBase64 = null;
 
 // Init on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initModals();
   initSearch();
   initForms();
+  initAdminQrUpload();
 });
 
 function initAuth() {
@@ -63,6 +66,7 @@ function authHeaders() {
 async function loadDashboard() {
   loadStats();
   loadPayments();
+  loadAdminPaymentMethods();
 }
 
 async function loadStats() {
@@ -128,9 +132,10 @@ function renderPaymentsTable(payments) {
   tbody.innerHTML = payments
     .map((p) => {
       const dateStr = new Date(p.createdAt).toLocaleDateString() + ' ' + new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
       const proofLink = p.proofUrl
-        ? `<a href="${p.proofUrl}" target="_blank" class="btn-table btn-view">👁️ View Receipt</a>`
-        : '<span style="color: #64748b;">No Link</span>';
+        ? `<button class="btn-table btn-view" onclick="openImageZoom('${escapeHtml(p.proofUrl)}', 'Receipt - ${escapeHtml(p.studentName)}')">👁️ View Receipt</button>`
+        : '<span style="color: #64748b;">No Image</span>';
 
       const actionButtons =
         p.status === 'PENDING'
@@ -174,6 +179,9 @@ function initNavigation() {
       if (btn.dataset.tab === 'paymentsTab') {
         pageTitle.textContent = 'Manual Payment Verification Queue';
         loadPayments();
+      } else if (btn.dataset.tab === 'methodsTab') {
+        pageTitle.textContent = 'QR & Direct Payment Methods';
+        loadAdminPaymentMethods();
       } else if (btn.dataset.tab === 'studentsTab') {
         pageTitle.textContent = 'Student Directory & Access Management';
         loadStudents();
@@ -207,74 +215,336 @@ function initSearch() {
   });
 
   const studentSearch = document.getElementById('studentSearchInput');
-  studentSearch?.addEventListener('input', () => {
-    clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
-      loadStudents();
-    }, 300);
-  });
+  if (studentSearch) {
+    studentSearch.addEventListener('input', () => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        loadStudents();
+      }, 300);
+    });
+  }
 }
 
 function initModals() {
-  document.getElementById('openDirectPaymentBtn').addEventListener('click', () => {
+  document.getElementById('openDirectPaymentBtn')?.addEventListener('click', () => {
+    document.getElementById('directPaymentForm').reset();
     openModal('directPaymentModal');
+  });
+
+  document.getElementById('openNewMethodBtn')?.addEventListener('click', () => {
+    openMethodModal();
+  });
+
+  document.getElementById('addMethodBtn')?.addEventListener('click', () => {
+    openMethodModal();
   });
 }
 
-function openModal(id) {
-  document.getElementById(id).classList.remove('hidden');
+function openModal(modalId) {
+  document.getElementById(modalId)?.classList.remove('hidden');
 }
 
-function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
+function closeModal(modalId) {
+  document.getElementById(modalId)?.classList.add('hidden');
 }
 
-function openApproveModal(paymentId) {
-  const p = paymentsData.find((x) => x.id === paymentId);
-  if (!p) return;
+// Payment Methods Admin Logic
+async function loadAdminPaymentMethods() {
+  const grid = document.getElementById('adminMethodsGrid');
+  const loading = document.getElementById('methodsAdminLoading');
+  const empty = document.getElementById('noAdminMethodsAlert');
+  const badge = document.getElementById('methodsBadge');
 
-  document.getElementById('approvePaymentId').value = p.id;
-  document.getElementById('approveStudentName').textContent = p.studentName;
-  document.getElementById('approvePhoneNumber').textContent = p.phoneNumber;
-  document.getElementById('approveTxId').textContent = p.transactionId;
-  document.getElementById('approveAmount').textContent = `$${p.amount.toFixed(2)}`;
-  document.getElementById('approveNotes').value = `Verified payment proof for ${p.studentName}`;
+  loading.classList.remove('hidden');
+  grid.classList.add('hidden');
+  empty.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/admin/payment-methods', { headers: authHeaders() });
+    const json = await res.json();
+
+    loading.classList.add('hidden');
+    if (!res.ok) throw new Error(json.error || 'Failed to load methods');
+
+    adminMethodsData = json.data || [];
+
+    if (badge) {
+      badge.textContent = adminMethodsData.length;
+      badge.classList.remove('hidden');
+    }
+
+    if (adminMethodsData.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    grid.innerHTML = '';
+    adminMethodsData.forEach((m) => {
+      const card = document.createElement('div');
+      card.className = `admin-method-card ${m.active ? '' : 'inactive'}`;
+
+      const qrThumb = m.qrCodeUrl
+        ? `<div class="admin-qr-thumb" onclick="openImageZoom('${escapeHtml(m.qrCodeUrl)}', '${escapeHtml(m.title)} QR Code')">
+             <img src="${m.qrCodeUrl}" alt="QR">
+           </div>`
+        : `<div class="admin-no-qr-thumb">
+             <span>💳</span>
+             <span>No QR Image</span>
+           </div>`;
+
+      const accountNameHtml = m.accountName
+        ? `<div class="admin-info-item">
+             <div class="admin-info-label">Account Name</div>
+             <div class="admin-info-value" style="font-family: inherit;">${escapeHtml(m.accountName)}</div>
+           </div>`
+        : '';
+
+      const instructionsHtml = m.instructions
+        ? `<div class="admin-method-instructions">💡 ${escapeHtml(m.instructions)}</div>`
+        : '';
+
+      card.innerHTML = `
+        <div class="admin-method-header">
+          <div class="admin-method-title">${escapeHtml(m.title)}</div>
+          <button type="button" class="btn-icon-danger" onclick="deleteMethod('${m.id}', '${escapeHtml(m.title)}')">🗑️ Delete</button>
+        </div>
+        <div class="admin-method-body">
+          ${qrThumb}
+          <div class="admin-method-info">
+            ${accountNameHtml}
+            <div class="admin-info-item">
+              <div class="admin-info-label">Account / Phone / ID</div>
+              <div class="admin-info-value">${escapeHtml(m.accountNumber)}</div>
+            </div>
+          </div>
+        </div>
+        ${instructionsHtml}
+        <div class="admin-method-footer">
+          <div class="method-switch-wrapper">
+            <label class="switch">
+              <input type="checkbox" ${m.active ? 'checked' : ''} onchange="toggleMethod('${m.id}')">
+              <span class="slider"></span>
+            </label>
+            <span>${m.active ? 'Active (Live)' : 'Inactive (Hidden)'}</span>
+          </div>
+        </div>
+      `;
+
+      grid.appendChild(card);
+    });
+
+    grid.classList.remove('hidden');
+  } catch (err) {
+    loading.classList.add('hidden');
+    empty.textContent = `Error loading payment methods: ${err.message}`;
+    empty.classList.remove('hidden');
+  }
+}
+
+function openMethodModal() {
+  const form = document.getElementById('methodForm');
+  form.reset();
+  uploadedAdminQrBase64 = null;
+  document.getElementById('adminQrPreviewImg').src = '';
+  document.getElementById('adminQrPreviewContainer').classList.add('hidden');
+  document.getElementById('adminQrDropContent').classList.remove('hidden');
+  document.getElementById('methodActiveCheckbox').checked = true;
+  document.getElementById('editMethodId').value = '';
+  openModal('methodModal');
+}
+
+function initAdminQrUpload() {
+  const dropZone = document.getElementById('adminQrDropZone');
+  const fileInput = document.getElementById('adminQrFileInput');
+  const previewContainer = document.getElementById('adminQrPreviewContainer');
+  const previewImg = document.getElementById('adminQrPreviewImg');
+  const removeBtn = document.getElementById('adminQrRemoveBtn');
+  const dropContent = document.getElementById('adminQrDropContent');
+  const urlInput = document.getElementById('methodQrUrlInput');
+
+  if (!dropZone || !fileInput) return;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  ['dragenter', 'dragover'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+  });
+
+  ['dragleave', 'drop'].forEach(name => {
+    dropZone.addEventListener(name, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleAdminQrFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleAdminQrFile(e.target.files[0]);
+    }
+  });
+
+  removeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    uploadedAdminQrBase64 = null;
+    fileInput.value = '';
+    previewImg.src = '';
+    previewContainer.classList.add('hidden');
+    dropContent.classList.remove('hidden');
+  });
+
+  function handleAdminQrFile(file) {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file (PNG, JPG, WEBP).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      uploadedAdminQrBase64 = event.target.result;
+      previewImg.src = uploadedAdminQrBase64;
+      dropContent.classList.add('hidden');
+      previewContainer.classList.remove('hidden');
+      if (urlInput) urlInput.value = '';
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+async function toggleMethod(id) {
+  try {
+    const res = await fetch(`/api/admin/payment-methods/${id}/toggle`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to toggle status');
+    showToast(json.message || 'Payment method status updated');
+    loadAdminPaymentMethods();
+  } catch (err) {
+    alert('Error toggling payment method: ' + err.message);
+    loadAdminPaymentMethods();
+  }
+}
+
+async function deleteMethod(id, title) {
+  if (!confirm(`Are you sure you want to delete payment method "${title}"?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/admin/payment-methods/${id}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to delete payment method');
+    showToast('Payment method deleted successfully');
+    loadAdminPaymentMethods();
+  } catch (err) {
+    alert('Error deleting payment method: ' + err.message);
+  }
+}
+
+function openImageZoom(src, title) {
+  const modal = document.getElementById('imageZoomModal');
+  const img = document.getElementById('zoomImage');
+  const titleEl = document.getElementById('zoomTitle');
+
+  img.src = src;
+  titleEl.textContent = title || 'Image Preview';
+  openModal('imageZoomModal');
+}
+
+function openApproveModal(id) {
+  const payment = paymentsData.find((p) => p.id === id);
+  if (!payment) return;
+
+  document.getElementById('approvePaymentId').value = payment.id;
+  document.getElementById('approveStudentName').textContent = payment.studentName;
+  document.getElementById('approvePhoneNumber').textContent = payment.phoneNumber;
+  document.getElementById('approveTxId').textContent = payment.transactionId;
+  document.getElementById('approveAmount').textContent = `$${payment.amount.toFixed(2)}`;
+  document.getElementById('approveNotes').value = `Verified payment of $${payment.amount.toFixed(2)} (${payment.paymentMethod})`;
 
   openModal('approveModal');
 }
 
-function openRejectModal(paymentId) {
-  document.getElementById('rejectPaymentId').value = paymentId;
+function openRejectModal(id) {
+  document.getElementById('rejectPaymentId').value = id;
   document.getElementById('rejectReason').value = '';
   openModal('rejectModal');
 }
 
-function openTierModal(userId, userEmail, currentTier) {
+function openTierModal(userId, email, currentTier) {
   document.getElementById('tierUserId').value = userId;
-  document.getElementById('tierUserEmail').value = userEmail;
-  document.getElementById('targetTierSelect').value = String(currentTier);
+  document.getElementById('tierUserEmail').value = email;
+  document.getElementById('targetTierSelect').value = currentTier;
   document.getElementById('tierReasonInput').value = '';
   openModal('tierModal');
 }
 
 function initForms() {
-  // Approve Form
+  // Method Form (Add QR payment method)
+  const methodForm = document.getElementById('methodForm');
+  methodForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('methodTitleInput').value.trim();
+    const accountName = document.getElementById('methodAccountNameInput').value.trim();
+    const accountNumber = document.getElementById('methodAccountNumberInput').value.trim();
+    const qrCodeUrl = uploadedAdminQrBase64 || document.getElementById('methodQrUrlInput').value.trim() || undefined;
+    const instructions = document.getElementById('methodInstructionsInput').value.trim();
+    const active = document.getElementById('methodActiveCheckbox').checked;
+
+    try {
+      const res = await fetch('/api/admin/payment-methods', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          title,
+          accountName: accountName || undefined,
+          accountNumber,
+          qrCodeUrl,
+          instructions: instructions || undefined,
+          active,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to save payment method');
+
+      closeModal('methodModal');
+      showToast('✅ Payment method & QR uploaded successfully!');
+      loadAdminPaymentMethods();
+    } catch (err) {
+      alert('Error saving payment method: ' + err.message);
+    }
+  });
+
+  // Approve Payment Form
   document.getElementById('approveForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const id = document.getElementById('approvePaymentId').value;
+    const paymentId = document.getElementById('approvePaymentId').value;
     const durationDays = document.getElementById('approveDuration').value;
     const tier = document.getElementById('approveTier').value;
     const notes = document.getElementById('approveNotes').value;
 
     try {
-      const res = await fetch(`/api/admin/manual-payments/${id}/approve`, {
+      const res = await fetch(`/api/admin/manual-payments/${paymentId}/approve`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ durationDays, tier, notes }),
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to approve');
+      if (!res.ok) throw new Error(json.error || 'Failed to approve payment');
 
       closeModal('approveModal');
       showToast('✅ Payment approved! Subscription active and Discord roles synced.');
@@ -284,24 +554,24 @@ function initForms() {
     }
   });
 
-  // Reject Form
+  // Reject Payment Form
   document.getElementById('rejectForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const id = document.getElementById('rejectPaymentId').value;
+    const paymentId = document.getElementById('rejectPaymentId').value;
     const reason = document.getElementById('rejectReason').value;
 
     try {
-      const res = await fetch(`/api/admin/manual-payments/${id}/reject`, {
+      const res = await fetch(`/api/admin/manual-payments/${paymentId}/reject`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ reason }),
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to reject');
+      if (!res.ok) throw new Error(json.error || 'Failed to reject payment');
 
       closeModal('rejectModal');
-      showToast('❌ Payment proof rejected.');
+      showToast('❌ Payment rejected and audit log recorded.');
       loadDashboard();
     } catch (err) {
       alert('Error rejecting payment: ' + err.message);
@@ -311,34 +581,41 @@ function initForms() {
   // Direct Payment Form
   document.getElementById('directPaymentForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const payload = {
-      studentName: document.getElementById('directName').value,
-      phoneNumber: document.getElementById('directPhone').value,
-      email: document.getElementById('directEmail').value,
-      discordId: document.getElementById('directDiscord').value || undefined,
-      transactionId: document.getElementById('directTx').value || undefined,
-      amount: document.getElementById('directAmount').value,
-      durationDays: document.getElementById('directDuration').value,
-      tier: document.getElementById('directTier').value,
-      paymentMethod: document.getElementById('directMethod').value,
-    };
+    const studentName = document.getElementById('directName').value;
+    const phoneNumber = document.getElementById('directPhone').value;
+    const email = document.getElementById('directEmail').value;
+    const discordId = document.getElementById('directDiscord').value;
+    const transactionId = document.getElementById('directTx').value;
+    const amount = document.getElementById('directAmount').value;
+    const durationDays = document.getElementById('directDuration').value;
+    const tier = document.getElementById('directTier').value;
+    const paymentMethod = document.getElementById('directMethod').value;
 
     try {
       const res = await fetch('/api/admin/manual-payments/create-direct', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          studentName,
+          phoneNumber,
+          email,
+          discordId,
+          transactionId,
+          amount,
+          durationDays,
+          tier,
+          paymentMethod,
+        }),
       });
 
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to record direct payment');
 
       closeModal('directPaymentModal');
-      document.getElementById('directPaymentForm').reset();
-      showToast('✅ Direct payment recorded and subscription activated!');
+      showToast('✅ Direct payment recorded and subscription active.');
       loadDashboard();
     } catch (err) {
-      alert('Error creating payment: ' + err.message);
+      alert('Error recording payment: ' + err.message);
     }
   });
 

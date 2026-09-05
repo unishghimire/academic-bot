@@ -433,3 +433,20 @@ model ManualPayment {
   @@map("manual_payments")
 }
 
+// Admin-managed payment methods with QR codes and account details
+model PaymentMethod {
+  id            String   @id @default(cuid())
+  title         String   // e.g. "eSewa Mobile Wallet", "Bank Transfer", "Zelle", "USDT (TRC20)"
+  accountName   String?  // e.g. "The Elite Circle Academy"
+  accountNumber String   // Account number, phone, or wallet address
+  qrCodeUrl     String?  // Base64 image data or URL
+  instructions  String?  // Guidelines / memo remarks for students
+  active        Boolean  @default(true)
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active])
+  @@map("payment_methods")
+}
+

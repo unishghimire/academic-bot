@@ -39,9 +39,9 @@ const envSchema = z.object({
   ACADEMY_WEBSITE_URL: z.string().default('https://academy.example.com'),
   ADMIN_PANEL_KEY: z.string().default('academy_admin_secret_2026'),
 
-  // Stripe
-  STRIPE_SECRET_KEY: z.string().default('sk_test_mock'),
-  STRIPE_WEBHOOK_SECRET: z.string().default('whsec_mock'),
+  // Stripe (Optional - Admin QR Manual Payments used by default)
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
   // AI Assistant
   AI_DAILY_CAP_PER_USER: z.string().transform(val => parseInt(val, 10)).default('20'),
