@@ -24,6 +24,11 @@ function createDiscordClient() {
     });
     client.once(discord_js_1.Events.ClientReady, async (readyClient) => {
         logger_js_1.logger.info({ tag: readyClient.user.tag }, '🤖 Discord Custom Academy Bot is online and ready!');
+        // Explicitly broadcast online presence
+        readyClient.user.setPresence({
+            status: 'online',
+            activities: [{ name: 'Academy Subscriptions | /verify-proof', type: discord_js_1.ActivityType.Watching }],
+        });
         // Automatically synchronize slash commands if running with live credentials
         if (env_js_1.env.DISCORD_TOKEN !== 'mock_token') {
             try {

@@ -4,6 +4,7 @@ import {
   Partials,
   Events,
   Interaction,
+  ActivityType,
 } from 'discord.js';
 import { env } from '../config/env.js';
 import { commandMap } from './commands/index.js';
@@ -28,6 +29,12 @@ export function createDiscordClient(): Client {
 
   client.once(Events.ClientReady, async readyClient => {
     logger.info({ tag: readyClient.user.tag }, '🤖 Discord Custom Academy Bot is online and ready!');
+
+    // Explicitly broadcast online presence
+    readyClient.user.setPresence({
+      status: 'online',
+      activities: [{ name: 'Academy Subscriptions | /verify-proof', type: ActivityType.Watching }],
+    });
 
     // Automatically synchronize slash commands if running with live credentials
     if (env.DISCORD_TOKEN !== 'mock_token') {
