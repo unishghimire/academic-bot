@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resetProgressCommand = exports.serverStatsCommand = exports.broadcastCommand = exports.addXpCommand = exports.unlockTierCommand = exports.revokePremiumCommand = exports.grantPremiumCommand = exports.adminDashboardCommand = void 0;
 const discord_js_1 = require("discord.js");
 const client_js_1 = require("../../db/client.js");
+const supabase_js_1 = require("../../db/supabase.js");
 const permissions_js_1 = require("../middleware/permissions.js");
 const audit_service_js_1 = require("../../services/audit.service.js");
 const role_sync_service_js_1 = require("../../services/role-sync.service.js");
@@ -27,21 +28,40 @@ exports.adminDashboardCommand = {
         let tier3Count = 0;
         let graduateCount = 0;
         let pendingTickets = 0;
-        try {
-            totalUsers = await client_js_1.prisma.user.count();
-            activeSubscribers = await client_js_1.prisma.user.count({
-                where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE },
-            });
-            tier1Count = await client_js_1.prisma.user.count({ where: { currentTier: 1 } });
-            tier2Count = await client_js_1.prisma.user.count({ where: { currentTier: 2 } });
-            tier3Count = await client_js_1.prisma.user.count({ where: { currentTier: 3 } });
-            graduateCount = await client_js_1.prisma.user.count({ where: { currentTier: 4 } });
-            pendingTickets = await client_js_1.prisma.ticket.count({ where: { status: 'OPEN' } });
+        if ((0, client_js_1.isPostgresOnline)()) {
+            try {
+                totalUsers = await client_js_1.prisma.user.count();
+                activeSubscribers = await client_js_1.prisma.user.count({
+                    where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE },
+                });
+                tier1Count = await client_js_1.prisma.user.count({ where: { currentTier: 1 } });
+                tier2Count = await client_js_1.prisma.user.count({ where: { currentTier: 2 } });
+                tier3Count = await client_js_1.prisma.user.count({ where: { currentTier: 3 } });
+                graduateCount = await client_js_1.prisma.user.count({ where: { currentTier: 4 } });
+                pendingTickets = await client_js_1.prisma.ticket.count({ where: { status: 'OPEN' } });
+            }
+            catch {
+                // Fallback below
+            }
         }
-        catch {
+        else {
+            const supabase = (0, supabase_js_1.getSupabaseClient)();
+            if (supabase) {
+                try {
+                    const { count } = await supabase
+                        .from('payment_verifications')
+                        .select('id', { count: 'exact', head: true })
+                        .in('status', ['verified', 'approved', 'Verified', 'Approved']);
+                    activeSubscribers = count || 0;
+                    totalUsers = count || 0;
+                }
+                catch {
+                    // Ignore
+                }
+            }
             const users = local_store_js_1.localStore.getUsers();
-            totalUsers = users.length;
-            activeSubscribers = users.filter(u => u.subscriptionStatus === client_1.SubscriptionStatus.ACTIVE).length;
+            if (users.length > totalUsers)
+                totalUsers = users.length;
             tier1Count = users.filter(u => u.currentTier === 1).length;
             tier2Count = users.filter(u => u.currentTier === 2).length;
             tier3Count = users.filter(u => u.currentTier === 3).length;

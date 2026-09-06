@@ -49,7 +49,7 @@ class PaymentVerificationSyncService {
             }
         }
         // 2. Fallback to Prisma raw query if PostgreSQL is online and Supabase returned empty
-        if (pendingApprovals.length === 0 && (0, client_js_1.isDatabaseOnline)()) {
+        if (pendingApprovals.length === 0 && (0, client_js_1.isPostgresOnline)()) {
             try {
                 const rows = forceAll
                     ? await client_js_1.prisma.$queryRaw `
@@ -206,7 +206,7 @@ class PaymentVerificationSyncService {
                 logger_js_1.logger.warn({ err }, 'Failed to mark record verified via Supabase');
             }
         }
-        if ((0, client_js_1.isDatabaseOnline)()) {
+        if ((0, client_js_1.isPostgresOnline)()) {
             try {
                 await client_js_1.prisma.$executeRaw `
           UPDATE public.payment_verifications 

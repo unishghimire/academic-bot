@@ -9,7 +9,7 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { getSupabaseClient } from '../db/supabase.js';
-import { prisma, isDatabaseOnline } from '../db/client.js';
+import { prisma, isDatabaseOnline, isPostgresOnline } from '../db/client.js';
 import { localStore } from '../db/local-store.js';
 import { SubscriptionStatus } from '@prisma/client';
 import { env } from '../config/env.js';
@@ -68,7 +68,7 @@ export class PaymentVerificationSyncService {
     }
 
     // 2. Fallback to Prisma raw query if PostgreSQL is online and Supabase returned empty
-    if (pendingApprovals.length === 0 && isDatabaseOnline()) {
+    if (pendingApprovals.length === 0 && isPostgresOnline()) {
       try {
         const rows = forceAll
           ? await prisma.$queryRaw<any[]>`
@@ -257,7 +257,7 @@ export class PaymentVerificationSyncService {
       }
     }
 
-    if (isDatabaseOnline()) {
+    if (isPostgresOnline()) {
       try {
         await prisma.$executeRaw`
           UPDATE public.payment_verifications 

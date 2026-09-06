@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = void 0;
 exports.isDatabaseOnline = isDatabaseOnline;
+exports.isPostgresOnline = isPostgresOnline;
 exports.checkDbConnection = checkDbConnection;
 const client_1 = require("@prisma/client");
 const supabase_js_1 = require("./supabase.js");
@@ -16,9 +17,13 @@ exports.prisma = global.prisma ||
 if (process.env.NODE_ENV !== 'production') {
     global.prisma = exports.prisma;
 }
-let isDbOnline = false;
+let isSupabaseReady = false;
+let isPostgresReady = false;
 function isDatabaseOnline() {
-    return isDbOnline;
+    return isSupabaseReady || isPostgresReady;
+}
+function isPostgresOnline() {
+    return isPostgresReady;
 }
 async function checkDbConnection() {
     // 1. Verify Supabase cloud connection
@@ -27,32 +32,34 @@ async function checkDbConnection() {
         try {
             const { error } = await supabase.from('payment_verifications').select('id').limit(1);
             if (!error) {
-                isDbOnline = true;
+                isSupabaseReady = true;
                 logger_js_1.logger.info('✅ Supabase cloud database connected successfully.');
-                return true;
+            }
+            else {
+                isSupabaseReady = false;
+                logger_js_1.logger.warn({ error: error.message }, 'Supabase cloud ping returned an error');
             }
         }
         catch {
-            // Continue to verify PostgreSQL if configured
+            isSupabaseReady = false;
         }
     }
-    // 2. If DATABASE_URL is defaulted to localhost and no local postgres is active, use Supabase/local mode
-    if (!env_js_1.env.DATABASE_URL || env_js_1.env.DATABASE_URL.includes('localhost') || env_js_1.env.DATABASE_URL.includes('mock')) {
-        isDbOnline = false;
-        logger_js_1.logger.info('ℹ️ Operating via Supabase cloud API & resilient storage.');
-        return false;
+    // 2. Direct PostgreSQL connection only if remote non-localhost DATABASE_URL is configured
+    if (env_js_1.env.DATABASE_URL && !env_js_1.env.DATABASE_URL.includes('localhost') && !env_js_1.env.DATABASE_URL.includes('mock')) {
+        try {
+            await exports.prisma.$queryRaw `SELECT 1`;
+            isPostgresReady = true;
+            logger_js_1.logger.info('✅ Direct PostgreSQL database connection established successfully.');
+        }
+        catch (error) {
+            isPostgresReady = false;
+            logger_js_1.logger.warn('⚠️ Direct PostgreSQL connection failed. Operating in Supabase cloud mode.');
+        }
     }
-    // 3. Direct PostgreSQL connection if custom remote DATABASE_URL provided
-    try {
-        await exports.prisma.$queryRaw `SELECT 1`;
-        isDbOnline = true;
-        logger_js_1.logger.info('✅ Direct PostgreSQL database connection established successfully.');
-        return true;
+    else {
+        isPostgresReady = false;
+        logger_js_1.logger.info('ℹ️ Active Database: Supabase Cloud. Localhost PostgreSQL is bypassed.');
     }
-    catch (error) {
-        isDbOnline = false;
-        logger_js_1.logger.warn('⚠️ Direct PostgreSQL connection failed. Operating in Supabase cloud mode.');
-        return false;
-    }
+    return isSupabaseReady || isPostgresReady;
 }
 //# sourceMappingURL=client.js.map

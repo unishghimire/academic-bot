@@ -1,6 +1,6 @@
 import { Client, Guild, GuildMember } from 'discord.js';
 import { PrismaClient, SubscriptionStatus } from '@prisma/client';
-import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
+import { prisma as defaultPrisma, isDatabaseOnline, isPostgresOnline } from '../db/client.js';
 import { env } from '../config/env.js';
 import { auditService } from './audit.service.js';
 import { logger } from '../utils/logger.js';
@@ -78,7 +78,7 @@ export class RoleSyncService {
    */
   async syncUserRoles(userId: string, client: Client): Promise<SyncResult | null> {
     let user: any = null;
-    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+    if (this.db === defaultPrisma && !isPostgresOnline()) {
       user = localStore.getUsers().find(u => u.id === userId);
     } else {
       try {
@@ -175,7 +175,7 @@ export class RoleSyncService {
    */
   async syncAllLinkedUsers(client: Client): Promise<{ total: number; corrected: number }> {
     let userIds: string[] = [];
-    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+    if (this.db === defaultPrisma && !isPostgresOnline()) {
       userIds = localStore.getUsers().filter(u => u.discordId).map(u => u.id);
     } else {
       try {

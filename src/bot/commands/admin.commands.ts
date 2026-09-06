@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, TextChannel } from 'discord.js';
-import { prisma } from '../../db/client.js';
+import { prisma, isPostgresOnline } from '../../db/client.js';
+import { getSupabaseClient } from '../../db/supabase.js';
 import { requireAdmin } from '../middleware/permissions.js';
 import { auditService } from '../../services/audit.service.js';
 import { roleSyncService } from '../../services/role-sync.service.js';
@@ -28,20 +29,36 @@ export const adminDashboardCommand = {
     let graduateCount = 0;
     let pendingTickets = 0;
 
-    try {
-      totalUsers = await prisma.user.count();
-      activeSubscribers = await prisma.user.count({
-        where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
-      });
-      tier1Count = await prisma.user.count({ where: { currentTier: 1 } });
-      tier2Count = await prisma.user.count({ where: { currentTier: 2 } });
-      tier3Count = await prisma.user.count({ where: { currentTier: 3 } });
-      graduateCount = await prisma.user.count({ where: { currentTier: 4 } });
-      pendingTickets = await prisma.ticket.count({ where: { status: 'OPEN' } });
-    } catch {
+    if (isPostgresOnline()) {
+      try {
+        totalUsers = await prisma.user.count();
+        activeSubscribers = await prisma.user.count({
+          where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
+        });
+        tier1Count = await prisma.user.count({ where: { currentTier: 1 } });
+        tier2Count = await prisma.user.count({ where: { currentTier: 2 } });
+        tier3Count = await prisma.user.count({ where: { currentTier: 3 } });
+        graduateCount = await prisma.user.count({ where: { currentTier: 4 } });
+        pendingTickets = await prisma.ticket.count({ where: { status: 'OPEN' } });
+      } catch {
+        // Fallback below
+      }
+    } else {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { count } = await supabase
+            .from('payment_verifications')
+            .select('id', { count: 'exact', head: true })
+            .in('status', ['verified', 'approved', 'Verified', 'Approved']);
+          activeSubscribers = count || 0;
+          totalUsers = count || 0;
+        } catch {
+          // Ignore
+        }
+      }
       const users = localStore.getUsers();
-      totalUsers = users.length;
-      activeSubscribers = users.filter(u => u.subscriptionStatus === SubscriptionStatus.ACTIVE).length;
+      if (users.length > totalUsers) totalUsers = users.length;
       tier1Count = users.filter(u => u.currentTier === 1).length;
       tier2Count = users.filter(u => u.currentTier === 2).length;
       tier3Count = users.filter(u => u.currentTier === 3).length;

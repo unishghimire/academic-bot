@@ -65,7 +65,7 @@ class RoleSyncService {
      */
     async syncUserRoles(userId, client) {
         let user = null;
-        if (this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)()) {
+        if (this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)()) {
             user = local_store_js_1.localStore.getUsers().find(u => u.id === userId);
         }
         else {
@@ -149,7 +149,7 @@ class RoleSyncService {
      */
     async syncAllLinkedUsers(client) {
         let userIds = [];
-        if (this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)()) {
+        if (this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)()) {
             userIds = local_store_js_1.localStore.getUsers().filter(u => u.discordId).map(u => u.id);
         }
         else {
