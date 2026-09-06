@@ -4,6 +4,7 @@
   "description": "Custom Academy Bot for Premium AI Video Ads Academy - Discord & Database Management System",
   "main": "dist/index.js",
   "scripts": {
+    "postinstall": "prisma generate && tsc",
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",

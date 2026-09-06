@@ -1,0 +1,19 @@
+import { PaymentMethod, ManualPayment, ManualPaymentStatus } from '@prisma/client';
+export declare const localStore: {
+    getPaymentMethods(onlyActive?: boolean): PaymentMethod[];
+    savePaymentMethod(method: PaymentMethod): PaymentMethod;
+    deletePaymentMethod(id: string): PaymentMethod | null;
+    getManualPayments(status?: string): ManualPayment[];
+    saveManualPayment(payment: ManualPayment): ManualPayment;
+    findPaymentById(id: string): ManualPayment | null;
+    findPaymentByTxId(txId: string): ManualPayment | null;
+    updatePaymentStatus(id: string, status: ManualPaymentStatus, reviewedBy?: string, rejectionReason?: string): ManualPayment | null;
+    getAuditLogs(limit?: number): any[];
+    saveAuditLog(log: any): void;
+    getUsers(): any[];
+    saveUser(user: any): any;
+    getLiveClasses(): any[];
+    saveLiveClass(meeting: any): any;
+    findLiveClassById(id: string): any | null;
+    deleteLiveClass(id: string): boolean;
+};
