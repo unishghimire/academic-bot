@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: academic-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SUPABASE_URL
+        value: https://snuunauwtuqyibmcajzh.supabase.co
+      - key: SUPABASE_ANON_KEY
+        value: sb_publishable_r_4B33JNzqJuZnmfYd_Yrg_rFVqoj_4
+      - key: DATABASE_URL
+        sync: false
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: DISCORD_GUILD_ID
+        sync: false
+      - key: ADMIN_PANEL_KEY
+        generateValue: true
+      - key: ACADEMY_API_SECRET
+        generateValue: true
+      - key: ROLE_PREMIUM
+        sync: false
+      - key: ROLE_TIER_1
+        sync: false
+      - key: ROLE_TIER_2
+        sync: false
+      - key: ROLE_TIER_3
+        sync: false
+      - key: ROLE_ADMIN
+        sync: false
+      - key: ROLE_INSTRUCTOR
+        sync: false

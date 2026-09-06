@@ -33,6 +33,7 @@ const envSchema = z.object({
   CHANNEL_SUPPORT: z.string().optional(),
   CHANNEL_ERROR_LOGS: z.string().optional(),
   CHANNEL_AUDIT_LOGS: z.string().optional(),
+  CHANNEL_ASSIGNMENT_REVIEWS: z.string().optional(),
 
   // Backend / Platform
   ACADEMY_API_SECRET: z.string({ required_error: 'ACADEMY_API_SECRET must be set (shared secret for course website API calls)' }),
@@ -43,10 +44,10 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
-  // AI Assistant
-  AI_DAILY_CAP_PER_USER: z.string().transform(val => parseInt(val, 10)).default('20'),
-  AI_MONTHLY_BUDGET_KILL_SWITCH: z.string().transform(val => parseInt(val, 10)).default('500'),
-  OPENAI_API_KEY: z.string().optional(),
+  // Supabase Database & REST API
+  SUPABASE_URL: z.string().default('https://snuunauwtuqyibmcajzh.supabase.co'),
+  SUPABASE_ANON_KEY: z.string().default('sb_publishable_r_4B33JNzqJuZnmfYd_Yrg_rFVqoj_4'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

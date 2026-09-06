@@ -8,6 +8,7 @@ import { tierEngine } from '../../services/tier-engine.service.js';
 import { roleSyncService } from '../../services/role-sync.service.js';
 import { auditService } from '../../services/audit.service.js';
 import { errorLogger } from '../../services/error-logger.service.js';
+import { paymentVerificationSyncService } from '../../services/payment-verification-sync.service.js';
 import { Client } from 'discord.js';
 import { ManualPaymentStatus, SubscriptionStatus } from '@prisma/client';
 
@@ -172,6 +173,20 @@ export function createAdminRouter(discordClient?: Client | null): Router {
         metadata: { paymentId, body: req.body },
       });
       res.status(400).json({ error: error.message });
+    }
+  });
+
+  // Trigger immediate database payment verification sync
+  router.post('/sync-verifications', async (req: Request, res: Response) => {
+    try {
+      if (discordClient) {
+        const result = await paymentVerificationSyncService.syncApprovedPayments(discordClient);
+        res.json({ success: true, result });
+      } else {
+        res.json({ success: false, message: 'Discord client not connected' });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

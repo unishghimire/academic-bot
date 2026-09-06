@@ -187,5 +187,41 @@ export const localStore = {
     }
     saveData(data);
     return user;
+  },
+
+  // Live Classes / Meetings
+  getLiveClasses(): any[] {
+    const data = ensureDataFile();
+    return (data as any).liveClasses || [];
+  },
+
+  saveLiveClass(meeting: any): any {
+    const data = ensureDataFile();
+    if (!(data as any).liveClasses) (data as any).liveClasses = [];
+    const idx = (data as any).liveClasses.findIndex((m: any) => m.id === meeting.id);
+    if (idx >= 0) {
+      (data as any).liveClasses[idx] = { ...(data as any).liveClasses[idx], ...meeting };
+    } else {
+      (data as any).liveClasses.unshift(meeting);
+    }
+    saveData(data);
+    return meeting;
+  },
+
+  findLiveClassById(id: string): any | null {
+    const data = ensureDataFile();
+    return ((data as any).liveClasses || []).find((m: any) => m.id === id) || null;
+  },
+
+  deleteLiveClass(id: string): boolean {
+    const data = ensureDataFile();
+    if (!(data as any).liveClasses) return false;
+    const idx = (data as any).liveClasses.findIndex((m: any) => m.id === id);
+    if (idx >= 0) {
+      (data as any).liveClasses.splice(idx, 1);
+      saveData(data);
+      return true;
+    }
+    return false;
   }
 };

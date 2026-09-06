@@ -79,11 +79,11 @@ This monolith has been split into three repositories:
 
 ### 5. 🤖 Discord Slash Commands
 - **Student:** `/link`, `/subscription`, `/progress`, `/continue`
-- **Course:** `/course lesson`, `/course quiz`, `/course next`
-- **AI Assistant:** `/ai [ad | prompt | script | hook | storyboard | caption | cta | voiceover]`
+- **Coursework & Submissions:** `/submit assignment`, `/submit project`
+- **Course Navigation:** `/course lesson`, `/course quiz`, `/course next`, `/course assignment`, `/course project`
 - **Gamification:** `/xp`, `/rank`, `/leaderboard`, `/challenge`
 - **Support:** `/support` (automatically provisions private ticket channels)
-- **Instructor:** `/assignment-review`, `/project-review`, `/student-progress`
+- **Instructor Review:** `/assignment-review`, `/project-review`, `/student-progress`
 - **Admin:** `/setup-server`, `/admin-dashboard`, `/grant-premium`, `/revoke-premium`, `/unlock-tier`, `/add-xp`, `/broadcast`, `/server-stats`, `/reset-progress`
 
 ---

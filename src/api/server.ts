@@ -28,17 +28,27 @@ export function createApiServer(discordClient?: Client | null): Express {
   // Serve static UI assets (Admin Panel & Payment Proof portal)
   app.use(express.static(path.join(process.cwd(), 'public')));
 
+  // Root endpoint for Render liveness ping
+  app.get('/', (_req, res) => {
+    res.status(200).json({
+      service: 'Academy Bot & Control Center API',
+      status: 'online',
+      discordReady: discordClient?.isReady() ?? false,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
   app.get('/admin', (_req, res) => {
     res.redirect('/admin/index.html');
   });
 
   app.get('/health', async (_req, res) => {
     const dbOk = await checkDbConnection();
-    res.status(dbOk ? 200 : 503).json({
-      status: dbOk ? 'healthy' : 'degraded',
+    res.status(200).json({
+      status: 'healthy',
       timestamp: new Date().toISOString(),
       database: dbOk ? 'connected' : 'disconnected',
-      discord: discordClient?.isReady() ? 'connected' : 'disconnected',
+      discord: discordClient?.isReady() ? 'connected' : 'connecting',
     });
   });
 

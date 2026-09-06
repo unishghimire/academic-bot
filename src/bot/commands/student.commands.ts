@@ -153,8 +153,11 @@ export const continueCommand = {
       `▶️ Next Up: ${nextLesson.title}`,
       `**Tier ${nextLesson.tier} • Module ${nextLesson.module} • Lesson ${nextLesson.orderIndex}**\n\n` +
       `${nextLesson.description}\n\n` +
-      `**Requirements:** Video Watch (≥90%) ${nextLesson.requiresQuiz ? '+ Quiz ' : ''}${nextLesson.requiresAssignment ? '+ Assignment' : ''}\n\n` +
-      `👉 **[Continue Lesson on Course Portal](${nextLesson.videoUrl || 'https://academy.example.com'})**`
+      `**Requirements:** Lesson Study (Video/Docs) ${nextLesson.requiresAssignment ? '+ Practical Assignment' : ''}\n\n` +
+      `👉 **Access Materials in Discord:**\n` +
+      `• 🎬 Video upload: **#tier-${nextLesson.tier}-lessons**\n` +
+      `• 📄 Lesson docs: **#tier-${nextLesson.tier}-resources**\n\n` +
+      `Run \`/course lesson lesson_id:${nextLesson.id}\` to view full details and mark progress!`
     );
 
     await interaction.editReply({ embeds: [embed] });

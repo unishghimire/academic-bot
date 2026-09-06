@@ -167,30 +167,127 @@ export class ServerSetupService {
       { id: guild.id, deny: [PermissionFlagsBits.SendMessages], allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] },
     ]);
 
-    // Category 2: TIER ENTRY GATES
-    const gatesCat = await getOrCreateChannel('🎓 TIER ENTRY GATES', ChannelType.GuildCategory, undefined, [
-      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-    ]);
-
-    const tier1Ch = await getOrCreateChannel('tier-1-start', ChannelType.GuildText, gatesCat.id, [
+    // Category 2: TIER 1 COURSE - AI VIDEO ADS
+    const tier1Cat = await getOrCreateChannel('📚 TIER 1: AI VIDEO ADS', ChannelType.GuildCategory, undefined, [
       { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
       ...(tier1Role ? [{ id: tier1Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
-      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
-      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
     ]);
 
-    const tier2Ch = await getOrCreateChannel('tier-2-start', ChannelType.GuildText, gatesCat.id, [
+    const tier1AnnounceCh = await getOrCreateChannel('tier-1-announcements', ChannelType.GuildText, tier1Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier1Role ? [{ id: tier1Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+    ]);
+
+    const tier1LessonsCh = await getOrCreateChannel('tier-1-lessons', ChannelType.GuildText, tier1Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier1Role ? [{ id: tier1Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+    ]);
+
+    const tier1ResourcesCh = await getOrCreateChannel('tier-1-resources', ChannelType.GuildText, tier1Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier1Role ? [{ id: tier1Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+    ]);
+
+    const tier1DiscussionCh = await getOrCreateChannel('tier-1-discussion', ChannelType.GuildText, tier1Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+      ...(tier1Role ? [{ id: tier1Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+    ]);
+
+    // Category 3: TIER 2 COURSE - ADVANCED AI PROMPTING
+    const tier2Cat = await getOrCreateChannel('🚀 TIER 2: ADVANCED AI PROMPTING', ChannelType.GuildCategory, undefined, [
       { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
       ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
-      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
-      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
     ]);
 
-    const tier3Ch = await getOrCreateChannel('tier-3-start', ChannelType.GuildText, gatesCat.id, [
+    const tier2AnnounceCh = await getOrCreateChannel('tier-2-announcements', ChannelType.GuildText, tier2Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+    ]);
+
+    const tier2LessonsCh = await getOrCreateChannel('tier-2-lessons', ChannelType.GuildText, tier2Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+    ]);
+
+    const tier2ResourcesCh = await getOrCreateChannel('tier-2-resources', ChannelType.GuildText, tier2Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+    ]);
+
+    const tier2DiscussionCh = await getOrCreateChannel('tier-2-discussion', ChannelType.GuildText, tier2Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+      ...(tier2Role ? [{ id: tier2Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+    ]);
+
+    // Category 4: TIER 3 COURSE - AGENCY SCALE & MASTERY
+    const tier3Cat = await getOrCreateChannel('👑 TIER 3: AGENCY SCALE MASTERY', ChannelType.GuildCategory, undefined, [
       { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
       ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory] }] : []),
-      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
-      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+    ]);
+
+    const tier3AnnounceCh = await getOrCreateChannel('tier-3-announcements', ChannelType.GuildText, tier3Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+    ]);
+
+    const tier3LessonsCh = await getOrCreateChannel('tier-3-lessons', ChannelType.GuildText, tier3Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] }] : []),
+    ]);
+
+    const tier3ResourcesCh = await getOrCreateChannel('tier-3-resources', ChannelType.GuildText, tier3Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] }] : []),
+    ]);
+
+    const tier3DiscussionCh = await getOrCreateChannel('tier-3-discussion', ChannelType.GuildText, tier3Cat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+      ...(tier3Role ? [{ id: tier3Role, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] }] : []),
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
     ]);
 
     // Category 3: COMMUNITY & SHOWCASE
@@ -227,6 +324,12 @@ export class ServerSetupService {
       ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel] }] : []),
     ]);
 
+    const assignmentReviewsCh = await getOrCreateChannel('assignment-reviews', ChannelType.GuildText, staffCat.id, [
+      { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+      ...(adminRole ? [{ id: adminRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] }] : []),
+      ...(instructorRole ? [{ id: instructorRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks] }] : []),
+    ]);
+
     channelMap['CHANNEL_WELCOME'] = welcomeCh.id;
     channelMap['CHANNEL_RULES'] = rulesCh.id;
     channelMap['CHANNEL_ANNOUNCEMENTS'] = announceCh.id;
@@ -235,6 +338,13 @@ export class ServerSetupService {
     channelMap['CHANNEL_SUPPORT'] = supportCh.id;
     channelMap['CHANNEL_ERROR_LOGS'] = errorCh.id;
     channelMap['CHANNEL_AUDIT_LOGS'] = auditCh.id;
+    channelMap['CHANNEL_ASSIGNMENT_REVIEWS'] = assignmentReviewsCh.id;
+    channelMap['CHANNEL_TIER_1_LESSONS'] = tier1LessonsCh.id;
+    channelMap['CHANNEL_TIER_1_RESOURCES'] = tier1ResourcesCh.id;
+    channelMap['CHANNEL_TIER_2_LESSONS'] = tier2LessonsCh.id;
+    channelMap['CHANNEL_TIER_2_RESOURCES'] = tier2ResourcesCh.id;
+    channelMap['CHANNEL_TIER_3_LESSONS'] = tier3LessonsCh.id;
+    channelMap['CHANNEL_TIER_3_RESOURCES'] = tier3ResourcesCh.id;
 
     // --- STEP 3: UPDATE .ENV FILE AUTOMATICALLY ---
     this.updateEnvFile({

@@ -11,6 +11,8 @@ import { checkRateLimit } from './middleware/rate-limiter.js';
 import { errorLogger } from '../services/error-logger.service.js';
 import { initRoleSyncJob } from './jobs/role-sync.job.js';
 import { initExpiryCheckJob } from './jobs/expiry-check.job.js';
+import { initPaymentSyncJob } from './jobs/payment-sync.job.js';
+import { deployCommands } from './deploy-commands.js';
 import { logger } from '../utils/logger.js';
 import { createErrorEmbed } from '../utils/embed-builder.js';
 
@@ -24,12 +26,22 @@ export function createDiscordClient(): Client {
     partials: [Partials.GuildMember, Partials.User],
   });
 
-  client.once(Events.ClientReady, readyClient => {
+  client.once(Events.ClientReady, async readyClient => {
     logger.info({ tag: readyClient.user.tag }, '🤖 Discord Custom Academy Bot is online and ready!');
 
-    // Initialize scheduled cron jobs
+    // Automatically synchronize slash commands if running with live credentials
+    if (env.DISCORD_TOKEN !== 'mock_token') {
+      try {
+        await deployCommands();
+      } catch (err) {
+        logger.warn({ err }, 'Slash command auto-deployment on ready encountered an error');
+      }
+    }
+
+    // Initialize scheduled cron and worker jobs
     initRoleSyncJob(client);
     initExpiryCheckJob(client);
+    initPaymentSyncJob(client);
   });
 
   client.on(Events.Error, error => {

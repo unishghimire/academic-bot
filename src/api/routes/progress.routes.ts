@@ -7,20 +7,28 @@ import { Client, TextChannel } from 'discord.js';
 import { env } from '../../config/env.js';
 import { createSuccessEmbed, createTierEmbed } from '../../utils/embed-builder.js';
 
+import { prisma } from '../../db/client.js';
+
 export function createProgressRouter(discordClient?: Client | null): Router {
   const router = Router();
 
   // Website video player reports watch percentage
   router.post('/watch', requireAcademyAuth, async (req: Request, res: Response) => {
-    const { userId, lessonId, watchPercent } = req.body;
+    const { userId, discordId, lessonId, watchPercent } = req.body;
 
-    if (!userId || !lessonId || typeof watchPercent !== 'number') {
-      res.status(400).json({ error: 'Missing or invalid userId, lessonId, or watchPercent' });
+    let targetUserId = userId;
+    if (!targetUserId && discordId) {
+      const user = await prisma.user.findUnique({ where: { discordId } });
+      if (user) targetUserId = user.id;
+    }
+
+    if (!targetUserId || !lessonId || typeof watchPercent !== 'number') {
+      res.status(400).json({ error: 'Missing or invalid userId (or discordId), lessonId, or watchPercent' });
       return;
     }
 
     try {
-      const result = await progressService.updateWatchProgress(userId, lessonId, watchPercent);
+      const result = await progressService.updateWatchProgress(targetUserId, lessonId, watchPercent);
 
       // If completing this lesson unlocked a new tier, announce and sync roles
       if (result.tierUnlocked && discordClient) {

@@ -85,11 +85,43 @@ export const assignmentReviewCommand = {
       await progressService.evaluateLessonCompletion(submission.userId, submission.assignment.lessonId);
     }
 
+    // Notify student directly with instructor feedback
+    if (submission.user.discordId) {
+      try {
+        const studentUser = await interaction.client.users.fetch(submission.user.discordId).catch(() => null);
+        if (studentUser) {
+          const isApproved = decision === 'APPROVED';
+          const studentFeedbackEmbed = isApproved
+            ? createSuccessEmbed(
+                `🎉 Assignment Approved: ${submission.assignment.title}`,
+                `Your assignment submission has been evaluated by an instructor.\n\n` +
+                `• **Status:** **APPROVED**\n` +
+                `• **Instructor Feedback:**\n> *${feedback}*\n\n` +
+                `• **XP Earned:** **+150 XP**\n` +
+                `• **Reviewed by:** <@${interaction.user.id}>\n\n` +
+                `Run \`/progress\` or \`/course next\` in the server to view your next lesson!`
+              )
+            : createWarningEmbed(
+                `📝 Assignment Feedback: ${submission.assignment.title}`,
+                `Your instructor has reviewed your assignment submission and requested revisions.\n\n` +
+                `• **Status:** **Needs Work / Rejected**\n` +
+                `• **Instructor Feedback:**\n> *${feedback}*\n\n` +
+                `• **Reviewed by:** <@${interaction.user.id}>\n\n` +
+                `Please review the instructor's notes, revise your deliverables, and re-submit anytime using:\n` +
+                `\`/submit assignment lesson:${submission.assignment.lessonId} submission_url:<new_url>\``
+              );
+          await studentUser.send({ embeds: [studentFeedbackEmbed] }).catch(() => {});
+        }
+      } catch {
+        // Non-blocking if student has DMs closed
+      }
+    }
+
     await interaction.editReply({
       embeds: [
         createSuccessEmbed(
           'Assignment Review Recorded',
-          `Submission \`${submissionId}\` marked as **${decision}**.\nFeedback: *${feedback}*`
+          `Submission \`${submissionId}\` marked as **${decision}**.\nFeedback sent to student: *${feedback}*`
         ),
       ],
     });
@@ -174,6 +206,38 @@ export const projectReviewCommand = {
       }
     }
 
+    // Notify student directly with capstone evaluation feedback
+    if (submission.user.discordId) {
+      try {
+        const studentUser = await interaction.client.users.fetch(submission.user.discordId).catch(() => null);
+        if (studentUser) {
+          const isApproved = decision === 'APPROVED';
+          const studentFeedbackEmbed = isApproved
+            ? createSuccessEmbed(
+                `🏆 Capstone Project Approved: Tier ${submission.project.tier}`,
+                `Congratulations! Your Capstone Project has been evaluated and **APPROVED**!\n\n` +
+                `• **Status:** **APPROVED**\n` +
+                `• **Instructor Evaluation:**\n> *${feedback}*\n\n` +
+                `• **Rewards:** **+500 XP & Next Tier Role Unlocked!**\n` +
+                `• **Evaluated by:** <@${interaction.user.id}>\n\n` +
+                `Check your new channels and roles in the server!`
+              )
+            : createWarningEmbed(
+                `⚠️ Capstone Project Evaluation: Tier ${submission.project.tier}`,
+                `Your instructor has evaluated your Capstone Project and provided constructive feedback:\n\n` +
+                `• **Status:** **${decision === 'NEEDS_REVISION' ? 'Needs Revision' : 'Rejected'}**\n` +
+                `• **Instructor Feedback:**\n> *${feedback}*\n\n` +
+                `• **Evaluated by:** <@${interaction.user.id}>\n\n` +
+                `Please address the feedback and submit your updated project using:\n` +
+                `\`/submit project tier:${submission.project.tier} submission_url:<new_url>\``
+              );
+          await studentUser.send({ embeds: [studentFeedbackEmbed] }).catch(() => {});
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+
     await interaction.editReply({
       embeds: [
         createSuccessEmbed(
@@ -181,7 +245,7 @@ export const projectReviewCommand = {
           `Student: <@${submission.user.discordId || submission.userId}>\n` +
           `Project: Tier ${submission.project.tier} Capstone\n` +
           `Status: **${decision}**\n` +
-          `Feedback: *${feedback}*`
+          `Feedback sent to student: *${feedback}*`
         ),
       ],
     });

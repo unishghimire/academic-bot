@@ -12,13 +12,13 @@ async function main() {
 
   // 2. Initialize & Start API Server immediately
   const app = createApiServer(discordClient);
-  const server = app.listen(env.PORT, () => {
-    logger.info(`🌐 Academy Control Center: http://localhost:${env.PORT}/admin`);
-    logger.info(`💳 Student Payment Portal: http://localhost:${env.PORT}/submit-proof.html`);
-    logger.info(`📡 Video Progress API: http://localhost:${env.PORT}/api/progress/watch`);
-    logger.info(`📡 Account Linking API: http://localhost:${env.PORT}/api/link/verify`);
+  const server = app.listen(env.PORT, '0.0.0.0', () => {
+    logger.info(`🌐 Academy Control Center: http://0.0.0.0:${env.PORT}/admin`);
+    logger.info(`💳 Student Payment Portal: http://0.0.0.0:${env.PORT}/submit-proof.html`);
+    logger.info(`📡 Video Progress API: http://0.0.0.0:${env.PORT}/api/progress/watch`);
+    logger.info(`📡 Account Linking API: http://0.0.0.0:${env.PORT}/api/link/verify`);
     if (env.STRIPE_SECRET_KEY) {
-      logger.info(`📡 Stripe Webhook: http://localhost:${env.PORT}/webhooks/stripe`);
+      logger.info(`📡 Stripe Webhook: http://0.0.0.0:${env.PORT}/webhooks/stripe`);
     }
   });
 

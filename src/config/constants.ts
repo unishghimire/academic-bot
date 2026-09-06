@@ -23,8 +23,6 @@ export const TIER_LEVELS = {
   GRADUATE: 4,
 } as const;
 
-export const DEFAULT_AI_DAILY_CAP = 20; // 20 AI generations per user per day
-
 export const ROLE_KEYS = {
   PREMIUM: 'ROLE_PREMIUM',
   TIER_1: 'ROLE_TIER_1',
