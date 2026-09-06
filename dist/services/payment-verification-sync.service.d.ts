@@ -18,7 +18,7 @@ export declare class PaymentVerificationSyncService {
      */
     private markRecordVerified;
     /**
-     * Sends a private DM to the student on Discord
+     * Sends a private welcome DM to the student on Discord, with channel announcement
      */
     private sendApprovalDM;
 }

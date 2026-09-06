@@ -220,29 +220,58 @@ class PaymentVerificationSyncService {
         }
     }
     /**
-     * Sends a private DM to the student on Discord
+     * Sends a private welcome DM to the student on Discord, with channel announcement
      */
     async sendApprovalDM(member, record, tier) {
+        const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+        const durationDays = record.access_duration_days || 30;
+        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+            .setLabel('⚡ Open Student Portal')
+            .setStyle(discord_js_1.ButtonStyle.Link)
+            .setURL(portalUrl));
+        const embed = new discord_js_1.EmbedBuilder()
+            .setTitle('🎉 Welcome to The Elite Circle Academy!')
+            .setColor(constants_js_1.COLORS.SUCCESS)
+            .setDescription(`Hello **${record.student_name}**, your payment proof of **${record.amount} ${record.currency || 'NPR'}** has been **approved** by our administration!\n\n` +
+            `• **Verified Plan:** **Tier ${tier}** + Premium Subscriber\n` +
+            `• **Access Duration:** **${durationDays} Days**\n` +
+            `• **Transaction Reference:** \`${record.transaction_id || 'VERIFIED'}\`\n\n` +
+            `Your Discord roles have been assigned automatically. You now have full access to your private tier channels and scheduled classes!\n\n` +
+            `📅 **Check Scheduled Classes:** Run \`/meeting list\`\n` +
+            `💳 **View Subscription Details:** Run \`/subscription\`\n\n` +
+            `Welcome to the Academy! Let's build your success together.`)
+            .setFooter(constants_js_1.EMBED_FOOTER)
+            .setTimestamp();
+        // 1. Send private DM to student inbox
+        let dmSent = false;
         try {
-            const durationDays = record.access_duration_days || 30;
-            const embed = new discord_js_1.EmbedBuilder()
-                .setTitle('🎉 Payment Verified & Access Activated!')
-                .setColor(constants_js_1.COLORS.SUCCESS)
-                .setDescription(`Hello **${record.student_name}**, your payment proof of **${record.amount} ${record.currency || 'NPR'}** has been **approved** by our administration!\n\n` +
-                `• **Granted Access:** **Tier ${tier}** + Academy Member\n` +
-                `• **Duration:** **${durationDays} Days**\n` +
-                `• **Transaction Reference:** \`${record.transaction_id}\`\n\n` +
-                `Your Discord roles have been assigned automatically. You now have access to your private channels and live classes!\n\n` +
-                `👉 Check upcoming live sessions with: \`/meeting list\`\n` +
-                `👉 View your subscription status with: \`/subscription\``)
-                .setFooter(constants_js_1.EMBED_FOOTER)
-                .setTimestamp();
-            await member.send({ embeds: [embed] }).catch(() => {
-                logger_js_1.logger.info({ memberId: member.id }, 'Could not deliver DM (user has DMs closed)');
-            });
+            await member.send({ embeds: [embed], components: [row] });
+            dmSent = true;
+            logger_js_1.logger.info({ memberId: member.id }, 'Delivered welcome approval DM to student inbox');
         }
         catch {
-            // Ignore DM failures
+            logger_js_1.logger.info({ memberId: member.id }, 'Could not deliver DM (user has private DMs closed)');
+        }
+        // 2. Post welcoming announcement in welcome or announcements channel
+        try {
+            const welcomeChannelId = env_js_1.env.CHANNEL_WELCOME || env_js_1.env.CHANNEL_ANNOUNCEMENTS;
+            if (welcomeChannelId) {
+                const channel = member.guild.channels.cache.get(welcomeChannelId);
+                if (channel && channel.isTextBased()) {
+                    const publicEmbed = new discord_js_1.EmbedBuilder()
+                        .setTitle('🎓 New Subscriber Verified & Welcomed!')
+                        .setColor(constants_js_1.COLORS.PRIMARY)
+                        .setDescription(`Please welcome <@${member.id}> to **The Elite Circle Academy**!\n\n` +
+                        `• **Access Granted:** **Tier ${tier}** & Premium Subscriber\n` +
+                        `• **Live Classes & Meetings:** Check \`/meeting list\` to join upcoming live training!`)
+                        .setFooter(constants_js_1.EMBED_FOOTER)
+                        .setTimestamp();
+                    await channel.send({ embeds: [publicEmbed], components: [row] }).catch(() => { });
+                }
+            }
+        }
+        catch {
+            // Ignore channel announcement failures
         }
     }
 }
