@@ -5,6 +5,7 @@ const discord_js_1 = require("discord.js");
 const client_1 = require("@prisma/client");
 const manual_payment_service_js_1 = require("../../services/manual-payment.service.js");
 const payment_method_service_js_1 = require("../../services/payment-method.service.js");
+const payment_verification_sync_service_js_1 = require("../../services/payment-verification-sync.service.js");
 const permissions_js_1 = require("../middleware/permissions.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const env_js_1 = require("../../config/env.js");
@@ -16,6 +17,9 @@ exports.verifyProofCommand = {
         .addSubcommand(sub => sub
         .setName('list')
         .setDescription('List all pending submitted payment proofs awaiting verification'))
+        .addSubcommand(sub => sub
+        .setName('sync')
+        .setDescription('Reconcile and sync all approved payments from database to Discord roles'))
         .addSubcommand(sub => sub
         .setName('approve')
         .setDescription('Approve a payment proof and activate student subscriber role')
@@ -40,6 +44,26 @@ exports.verifyProofCommand = {
         if (!isAllowed)
             return;
         const sub = interaction.options.getSubcommand();
+        if (sub === 'sync') {
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const syncRes = await payment_verification_sync_service_js_1.paymentVerificationSyncService.syncApprovedPayments(interaction.client, true);
+                await interaction.editReply({
+                    embeds: [
+                        (0, embed_builder_js_1.createSuccessEmbed)('🔄 Database Payment Reconciliation Complete', `• **Total Approved Records Scanned:** **${syncRes.totalFound}**\n` +
+                            `• **Discord Roles Synchronized / Assigned:** **${syncRes.rolesAssigned}**\n` +
+                            `• **Errors Encountered:** **${syncRes.errors}**\n\n` +
+                            `*All approved database members are verified and up to date.*`),
+                    ],
+                });
+            }
+            catch (err) {
+                await interaction.editReply({
+                    embeds: [(0, embed_builder_js_1.createErrorEmbed)('Sync Failed', err.message || 'Database sync encountered an issue.')],
+                });
+            }
+            return;
+        }
         if (sub === 'list') {
             await interaction.deferReply({ ephemeral: true });
             try {

@@ -1,6 +1,8 @@
 import { Client, Guild, GuildMember, TextChannel, EmbedBuilder } from 'discord.js';
 import { getSupabaseClient } from '../db/supabase.js';
 import { prisma, isDatabaseOnline } from '../db/client.js';
+import { localStore } from '../db/local-store.js';
+import { SubscriptionStatus } from '@prisma/client';
 import { env } from '../config/env.js';
 import { COLORS, EMBED_FOOTER, TIER_LEVELS } from '../config/constants.js';
 import { logger } from '../utils/logger.js';
@@ -16,7 +18,7 @@ export class PaymentVerificationSyncService {
   /**
    * Sweeps the database for approved payment verifications and grants Discord roles to users
    */
-  async syncApprovedPayments(client: Client): Promise<SyncResult> {
+  async syncApprovedPayments(client: Client, forceAll: boolean = false): Promise<SyncResult> {
     const result: SyncResult = { totalFound: 0, rolesAssigned: 0, errors: 0 };
 
     if (!client.isReady()) {
@@ -32,14 +34,19 @@ export class PaymentVerificationSyncService {
     const supabase = getSupabaseClient();
     let pendingApprovals: any[] = [];
 
-    // 1. Fetch unverified approved rows from Supabase
+    // 1. Fetch approved rows from Supabase
     if (supabase) {
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('payment_verifications')
           .select('*')
-          .in('status', ['verified', 'approved'])
-          .or('is_discord_verified.is.null,is_discord_verified.eq.false');
+          .in('status', ['verified', 'approved', 'Verified', 'Approved', 'VERIFIED', 'APPROVED']);
+
+        if (!forceAll) {
+          query = query.or('is_discord_verified.is.null,is_discord_verified.eq.false');
+        }
+
+        const { data, error } = await query;
 
         if (!error && data) {
           pendingApprovals = data;
@@ -54,13 +61,20 @@ export class PaymentVerificationSyncService {
     // 2. Fallback to Prisma raw query if PostgreSQL is online and Supabase returned empty
     if (pendingApprovals.length === 0 && isDatabaseOnline()) {
       try {
-        const rows = await prisma.$queryRaw<any[]>`
-          SELECT * FROM public.payment_verifications 
-          WHERE LOWER(status) IN ('verified', 'approved') 
-            AND (is_discord_verified IS FALSE OR is_discord_verified IS NULL)
-          ORDER BY created_at ASC
-          LIMIT 20
-        `;
+        const rows = forceAll
+          ? await prisma.$queryRaw<any[]>`
+              SELECT * FROM public.payment_verifications 
+              WHERE LOWER(status) IN ('verified', 'approved') 
+              ORDER BY created_at ASC
+              LIMIT 50
+            `
+          : await prisma.$queryRaw<any[]>`
+              SELECT * FROM public.payment_verifications 
+              WHERE LOWER(status) IN ('verified', 'approved') 
+                AND (is_discord_verified IS FALSE OR is_discord_verified IS NULL)
+              ORDER BY created_at ASC
+              LIMIT 20
+            `;
         if (rows && rows.length > 0) {
           pendingApprovals = rows;
         }
@@ -74,7 +88,7 @@ export class PaymentVerificationSyncService {
     }
 
     result.totalFound = pendingApprovals.length;
-    logger.info({ count: pendingApprovals.length }, 'Found approved payment verifications requiring Discord role grant');
+    logger.info({ count: pendingApprovals.length, forceAll }, 'Scanning approved payment verifications for Discord role grant');
 
     for (const record of pendingApprovals) {
       try {
@@ -82,7 +96,7 @@ export class PaymentVerificationSyncService {
 
         if (!member) {
           logger.warn(
-            { recordId: record.id, student: record.student_name, discordId: record.discord_id },
+            { recordId: record.id, student: record.student_name, discordId: record.discord_id, username: record.discord_username },
             'Student member not found in Discord server yet. Will retry on next sweep.'
           );
           continue;
@@ -112,30 +126,41 @@ export class PaymentVerificationSyncService {
             { memberId: member.id, roles: rolesToAdd, tier },
             'Assigned Discord subscriber roles after admin database approval'
           );
+          result.rolesAssigned++;
         }
 
-        // Mark record as verified in database
-        await this.markRecordVerified(record.id, member.id);
+        // Update local resilient store as well
+        localStore.saveUser({
+          id: `usr_${member.id}`,
+          email: record.email || `${member.user.username}@discord.local`,
+          discordId: member.id,
+          currentTier: tier,
+          subscriptionStatus: SubscriptionStatus.ACTIVE,
+          subscriptionExpiresAt: new Date(Date.now() + (record.access_duration_days || 30) * 24 * 60 * 60 * 1000),
+        });
 
-        // Send congratulatory Discord DM to student
-        await this.sendApprovalDM(member, record, tier);
+        // Mark record as verified in database if not yet marked
+        if (!record.is_discord_verified) {
+          await this.markRecordVerified(record.id, member.id);
 
-        // Record in audit log
-        await auditService.log({
-          actorType: 'SYSTEM',
-          actorId: 'PAYMENT_VERIFICATION_SYNC',
-          action: 'ADMIN_PANEL_PAYMENT_VERIFIED',
-          targetType: 'USER',
-          targetId: member.id,
-          reason: `Admin approved payment proof on website ($${record.amount} ${record.currency || 'NPR'}). Discord roles assigned.`,
-          after: {
-            paymentVerificationId: record.id,
-            rolesGranted: rolesToAdd,
-            tier,
-          },
-        }).catch(() => null);
+          // Send congratulatory Discord DM to student
+          await this.sendApprovalDM(member, record, tier);
 
-        result.rolesAssigned++;
+          // Record in audit log
+          await auditService.log({
+            actorType: 'SYSTEM',
+            actorId: 'PAYMENT_VERIFICATION_SYNC',
+            action: 'ADMIN_PANEL_PAYMENT_VERIFIED',
+            targetType: 'USER',
+            targetId: member.id,
+            reason: `Admin approved payment proof on website ($${record.amount} ${record.currency || 'NPR'}). Discord roles assigned.`,
+            after: {
+              paymentVerificationId: record.id,
+              rolesGranted: rolesToAdd,
+              tier,
+            },
+          }).catch(() => null);
+        }
       } catch (err) {
         logger.error({ err, recordId: record.id }, 'Error processing approved payment record');
         result.errors++;
@@ -154,23 +179,29 @@ export class PaymentVerificationSyncService {
     discordUsername?: string | null,
     email?: string | null
   ): Promise<GuildMember | null> {
-    // 1. Direct Snowflake ID lookup (17-20 digits)
-    if (discordId && /^\d{17,20}$/.test(discordId.trim())) {
+    // 1. Direct Snowflake ID lookup (17-20 digits) across all candidates
+    const possibleSnowflakes = [discordId, discordUsername].filter(
+      (s): s is string => Boolean(s && /^\d{17,20}$/.test(s.trim()))
+    );
+
+    for (const sf of possibleSnowflakes) {
       try {
-        const member = await guild.members.fetch(discordId.trim());
+        const member = await guild.members.fetch(sf.trim());
         if (member) return member;
       } catch {
-        // Not found by ID
+        // Continue checking other candidates
       }
     }
 
-    // 2. Search by Discord Username
-    const queryName = (discordId || discordUsername || '').trim().toLowerCase().replace(/^@/, '');
-    if (queryName) {
-      const cacheMembers = typeof (guild.members.cache as any).find === 'function'
-        ? (guild.members.cache as any)
-        : Array.from((guild.members.cache as any).values?.() || []);
+    // 2. Search by Discord Username across all candidates
+    const rawCandidates = [discordUsername, discordId]
+      .filter((s): s is string => Boolean(s && s.trim()))
+      .map(s => s.trim().toLowerCase().replace(/^@/, '').replace(/#\d{4}$/, ''));
 
+    for (const queryName of rawCandidates) {
+      if (!queryName) continue;
+
+      const cacheMembers = Array.from(guild.members.cache.values());
       const cached = cacheMembers.find(
         (m: any) =>
           m?.user?.username?.toLowerCase() === queryName ||
@@ -185,7 +216,8 @@ export class PaymentVerificationSyncService {
         const match = fetchedMembers.find(
           (m: any) =>
             m?.user?.username?.toLowerCase() === queryName ||
-            m?.user?.tag?.toLowerCase() === queryName
+            m?.user?.tag?.toLowerCase() === queryName ||
+            m?.displayName?.toLowerCase() === queryName
         );
         if (match) return match;
       } catch {

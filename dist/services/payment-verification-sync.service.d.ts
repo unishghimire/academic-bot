@@ -8,7 +8,7 @@ export declare class PaymentVerificationSyncService {
     /**
      * Sweeps the database for approved payment verifications and grants Discord roles to users
      */
-    syncApprovedPayments(client: Client): Promise<SyncResult>;
+    syncApprovedPayments(client: Client, forceAll?: boolean): Promise<SyncResult>;
     /**
      * Helper to resolve guild member by snowflake ID, username tag, or cached search
      */

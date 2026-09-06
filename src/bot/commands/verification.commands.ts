@@ -8,6 +8,7 @@ import {
 import { ManualPaymentStatus } from '@prisma/client';
 import { manualPaymentService } from '../../services/manual-payment.service.js';
 import { paymentMethodService } from '../../services/payment-method.service.js';
+import { paymentVerificationSyncService } from '../../services/payment-verification-sync.service.js';
 import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { env } from '../../config/env.js';
@@ -21,6 +22,11 @@ export const verifyProofCommand = {
       sub
         .setName('list')
         .setDescription('List all pending submitted payment proofs awaiting verification')
+    )
+    .addSubcommand(sub =>
+      sub
+        .setName('sync')
+        .setDescription('Reconcile and sync all approved payments from database to Discord roles')
     )
     .addSubcommand(sub =>
       sub
@@ -67,6 +73,29 @@ export const verifyProofCommand = {
     if (!isAllowed) return;
 
     const sub = interaction.options.getSubcommand();
+
+    if (sub === 'sync') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const syncRes = await paymentVerificationSyncService.syncApprovedPayments(interaction.client, true);
+        await interaction.editReply({
+          embeds: [
+            createSuccessEmbed(
+              '🔄 Database Payment Reconciliation Complete',
+              `• **Total Approved Records Scanned:** **${syncRes.totalFound}**\n` +
+              `• **Discord Roles Synchronized / Assigned:** **${syncRes.rolesAssigned}**\n` +
+              `• **Errors Encountered:** **${syncRes.errors}**\n\n` +
+              `*All approved database members are verified and up to date.*`
+            ),
+          ],
+        });
+      } catch (err: any) {
+        await interaction.editReply({
+          embeds: [createErrorEmbed('Sync Failed', err.message || 'Database sync encountered an issue.')],
+        });
+      }
+      return;
+    }
 
     if (sub === 'list') {
       await interaction.deferReply({ ephemeral: true });

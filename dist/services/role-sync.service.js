@@ -148,24 +148,36 @@ class RoleSyncService {
      * Full sweep across all linked users in the database
      */
     async syncAllLinkedUsers(client) {
-        const linkedUsers = await this.db.user.findMany({
-            where: { discordId: { not: null } },
-            select: { id: true },
-        });
-        let corrected = 0;
-        for (const user of linkedUsers) {
+        let userIds = [];
+        if (this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)()) {
+            userIds = local_store_js_1.localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+        }
+        else {
             try {
-                const result = await this.syncUserRoles(user.id, client);
+                const linkedUsers = await this.db.user.findMany({
+                    where: { discordId: { not: null } },
+                    select: { id: true },
+                });
+                userIds = linkedUsers.map(u => u.id);
+            }
+            catch {
+                userIds = local_store_js_1.localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+            }
+        }
+        let corrected = 0;
+        for (const id of userIds) {
+            try {
+                const result = await this.syncUserRoles(id, client);
                 if (result && !result.unchanged) {
                     corrected++;
                 }
             }
             catch (error) {
-                logger_js_1.logger.error({ err: error, userId: user.id }, 'Error syncing user roles during sweep');
+                logger_js_1.logger.error({ err: error, userId: id }, 'Error syncing user roles during sweep');
             }
         }
-        logger_js_1.logger.info({ total: linkedUsers.length, corrected }, 'Completed full role sync sweep');
-        return { total: linkedUsers.length, corrected };
+        logger_js_1.logger.info({ total: userIds.length, corrected }, 'Completed full role sync sweep');
+        return { total: userIds.length, corrected };
     }
 }
 exports.RoleSyncService = RoleSyncService;

@@ -174,25 +174,35 @@ export class RoleSyncService {
    * Full sweep across all linked users in the database
    */
   async syncAllLinkedUsers(client: Client): Promise<{ total: number; corrected: number }> {
-    const linkedUsers = await this.db.user.findMany({
-      where: { discordId: { not: null } },
-      select: { id: true },
-    });
+    let userIds: string[] = [];
+    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+      userIds = localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+    } else {
+      try {
+        const linkedUsers = await this.db.user.findMany({
+          where: { discordId: { not: null } },
+          select: { id: true },
+        });
+        userIds = linkedUsers.map(u => u.id);
+      } catch {
+        userIds = localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+      }
+    }
 
     let corrected = 0;
-    for (const user of linkedUsers) {
+    for (const id of userIds) {
       try {
-        const result = await this.syncUserRoles(user.id, client);
+        const result = await this.syncUserRoles(id, client);
         if (result && !result.unchanged) {
           corrected++;
         }
       } catch (error) {
-        logger.error({ err: error, userId: user.id }, 'Error syncing user roles during sweep');
+        logger.error({ err: error, userId: id }, 'Error syncing user roles during sweep');
       }
     }
 
-    logger.info({ total: linkedUsers.length, corrected }, 'Completed full role sync sweep');
-    return { total: linkedUsers.length, corrected };
+    logger.info({ total: userIds.length, corrected }, 'Completed full role sync sweep');
+    return { total: userIds.length, corrected };
   }
 }
 
