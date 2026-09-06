@@ -10,6 +10,7 @@ const tier_engine_service_js_1 = require("../../services/tier-engine.service.js"
 const xp_service_js_1 = require("../../services/xp.service.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const client_1 = require("@prisma/client");
+const local_store_js_1 = require("../../db/local-store.js");
 exports.adminDashboardCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('admin-dashboard')
@@ -19,15 +20,34 @@ exports.adminDashboardCommand = {
         if (!isAllowed)
             return;
         await interaction.deferReply({ ephemeral: true });
-        const totalUsers = await client_js_1.prisma.user.count();
-        const activeSubscribers = await client_js_1.prisma.user.count({
-            where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE },
-        });
-        const tier1Count = await client_js_1.prisma.user.count({ where: { currentTier: 1 } });
-        const tier2Count = await client_js_1.prisma.user.count({ where: { currentTier: 2 } });
-        const tier3Count = await client_js_1.prisma.user.count({ where: { currentTier: 3 } });
-        const graduateCount = await client_js_1.prisma.user.count({ where: { currentTier: 4 } });
-        const pendingTickets = await client_js_1.prisma.ticket.count({ where: { status: 'OPEN' } });
+        let totalUsers = 0;
+        let activeSubscribers = 0;
+        let tier1Count = 0;
+        let tier2Count = 0;
+        let tier3Count = 0;
+        let graduateCount = 0;
+        let pendingTickets = 0;
+        try {
+            totalUsers = await client_js_1.prisma.user.count();
+            activeSubscribers = await client_js_1.prisma.user.count({
+                where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE },
+            });
+            tier1Count = await client_js_1.prisma.user.count({ where: { currentTier: 1 } });
+            tier2Count = await client_js_1.prisma.user.count({ where: { currentTier: 2 } });
+            tier3Count = await client_js_1.prisma.user.count({ where: { currentTier: 3 } });
+            graduateCount = await client_js_1.prisma.user.count({ where: { currentTier: 4 } });
+            pendingTickets = await client_js_1.prisma.ticket.count({ where: { status: 'OPEN' } });
+        }
+        catch {
+            const users = local_store_js_1.localStore.getUsers();
+            totalUsers = users.length;
+            activeSubscribers = users.filter(u => u.subscriptionStatus === client_1.SubscriptionStatus.ACTIVE).length;
+            tier1Count = users.filter(u => u.currentTier === 1).length;
+            tier2Count = users.filter(u => u.currentTier === 2).length;
+            tier3Count = users.filter(u => u.currentTier === 3).length;
+            graduateCount = users.filter(u => u.currentTier === 4).length;
+            pendingTickets = 0;
+        }
         const embed = (0, embed_builder_js_1.createInfoEmbed)('⚙️ Academy Admin Operations Dashboard', `**Total Registered Students:** **${totalUsers}**\n` +
             `**Active Paid Subscribers:** **${activeSubscribers}**\n` +
             `**Open Support Tickets:** **${pendingTickets}**\n\n` +

@@ -23,6 +23,10 @@ services:
         sync: false
       - key: DISCORD_GUILD_ID
         sync: false
+      - key: STUDENT_PORTAL_URL
+        value: https://academic-student-portal.vercel.app
+      - key: ACADEMY_WEBSITE_URL
+        value: https://academic-student-portal.vercel.app
       - key: ADMIN_PANEL_KEY
         generateValue: true
       - key: ACADEMY_API_SECRET

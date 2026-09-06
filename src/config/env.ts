@@ -37,7 +37,8 @@ const envSchema = z.object({
 
   // Backend / Platform
   ACADEMY_API_SECRET: z.string().default('academy_api_secret_default_key_2026'),
-  ACADEMY_WEBSITE_URL: z.string().default('https://academy.example.com'),
+  ACADEMY_WEBSITE_URL: z.string().default('https://academic-student-portal.vercel.app'),
+  STUDENT_PORTAL_URL: z.string().default('https://academic-student-portal.vercel.app'),
   ADMIN_PANEL_KEY: z.string().default('academy_admin_panel_secret_key_32chars'),
 
   // Stripe (Optional - Admin QR Manual Payments used by default)

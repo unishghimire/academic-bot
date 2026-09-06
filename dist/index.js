@@ -13,7 +13,7 @@ async function main() {
     const app = (0, server_js_1.createApiServer)(discordClient);
     const server = app.listen(env_js_1.env.PORT, '0.0.0.0', () => {
         logger_js_1.logger.info(`🌐 Academy Control Center: http://0.0.0.0:${env_js_1.env.PORT}/admin`);
-        logger_js_1.logger.info(`💳 Student Payment Portal: http://0.0.0.0:${env_js_1.env.PORT}/submit-proof.html`);
+        logger_js_1.logger.info(`💳 Student Payment Portal: ${env_js_1.env.STUDENT_PORTAL_URL}`);
         logger_js_1.logger.info(`📡 Video Progress API: http://0.0.0.0:${env_js_1.env.PORT}/api/progress/watch`);
         logger_js_1.logger.info(`📡 Account Linking API: http://0.0.0.0:${env_js_1.env.PORT}/api/link/verify`);
         if (env_js_1.env.STRIPE_SECRET_KEY) {

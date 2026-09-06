@@ -7,6 +7,7 @@ import { tierEngine } from '../../services/tier-engine.service.js';
 import { xpService } from '../../services/xp.service.js';
 import { createSuccessEmbed, createWarningEmbed, createInfoEmbed } from '../../utils/embed-builder.js';
 import { SubscriptionStatus } from '@prisma/client';
+import { localStore } from '../../db/local-store.js';
 
 export const adminDashboardCommand = {
   data: new SlashCommandBuilder()
@@ -19,15 +20,34 @@ export const adminDashboardCommand = {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const totalUsers = await prisma.user.count();
-    const activeSubscribers = await prisma.user.count({
-      where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
-    });
-    const tier1Count = await prisma.user.count({ where: { currentTier: 1 } });
-    const tier2Count = await prisma.user.count({ where: { currentTier: 2 } });
-    const tier3Count = await prisma.user.count({ where: { currentTier: 3 } });
-    const graduateCount = await prisma.user.count({ where: { currentTier: 4 } });
-    const pendingTickets = await prisma.ticket.count({ where: { status: 'OPEN' } });
+    let totalUsers = 0;
+    let activeSubscribers = 0;
+    let tier1Count = 0;
+    let tier2Count = 0;
+    let tier3Count = 0;
+    let graduateCount = 0;
+    let pendingTickets = 0;
+
+    try {
+      totalUsers = await prisma.user.count();
+      activeSubscribers = await prisma.user.count({
+        where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
+      });
+      tier1Count = await prisma.user.count({ where: { currentTier: 1 } });
+      tier2Count = await prisma.user.count({ where: { currentTier: 2 } });
+      tier3Count = await prisma.user.count({ where: { currentTier: 3 } });
+      graduateCount = await prisma.user.count({ where: { currentTier: 4 } });
+      pendingTickets = await prisma.ticket.count({ where: { status: 'OPEN' } });
+    } catch {
+      const users = localStore.getUsers();
+      totalUsers = users.length;
+      activeSubscribers = users.filter(u => u.subscriptionStatus === SubscriptionStatus.ACTIVE).length;
+      tier1Count = users.filter(u => u.currentTier === 1).length;
+      tier2Count = users.filter(u => u.currentTier === 2).length;
+      tier3Count = users.filter(u => u.currentTier === 3).length;
+      graduateCount = users.filter(u => u.currentTier === 4).length;
+      pendingTickets = 0;
+    }
 
     const embed = createInfoEmbed(
       '⚙️ Academy Admin Operations Dashboard',

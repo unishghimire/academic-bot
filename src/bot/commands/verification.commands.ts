@@ -1,6 +1,9 @@
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from 'discord.js';
 import { ManualPaymentStatus } from '@prisma/client';
 import { manualPaymentService } from '../../services/manual-payment.service.js';
@@ -223,7 +226,14 @@ export const paymentMethodsCommand = {
         return block;
       });
 
-      const portalUrl = `http://localhost:${env.PORT}/submit-proof.html`;
+      const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('💳 Open Student Payment Portal')
+          .setStyle(ButtonStyle.Link)
+          .setURL(portalUrl)
+      );
 
       const embed = createInfoEmbed(
         '💳 Academy Payment Methods & Subscription Instructions',
@@ -231,16 +241,45 @@ export const paymentMethodsCommand = {
         methodBlocks.join('\n') +
         `\n📌 **After Payment:**\n` +
         `1. Upload your screenshot/receipt at: **[Student Payment Portal](${portalUrl})**\n` +
-        `2. Or run \`/link\` with your student email.\n` +
-        `3. Our staff will verify your proof and your role will be assigned automatically!`
+        `2. Our staff will verify your proof in the admin panel.\n` +
+        `3. Your Discord roles (@Tier-1, @Premium) and private channel access are assigned automatically!\n\n` +
+        `👉 Click the button below to open the payment portal directly:`
       );
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed], components: [row] });
     } catch (err: any) {
       logger.error({ err }, 'Failed to fetch payment methods');
       await interaction.editReply({
         embeds: [createErrorEmbed('Error', 'Unable to retrieve payment methods at this time.')],
       });
     }
+  },
+};
+
+export const portalCommand = {
+  data: new SlashCommandBuilder()
+    .setName('portal')
+    .setDescription('Direct link to open the Academy Student Payment & Verification Portal'),
+
+  async execute(interaction: ChatInputCommandInteraction) {
+    const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('💳 Open Student Payment Portal')
+        .setStyle(ButtonStyle.Link)
+        .setURL(portalUrl)
+    );
+
+    const embed = createInfoEmbed(
+      '⚡ Academy Student Payment Portal',
+      `Welcome to **The Elite Circle Academy** official payment & verification portal!\n\n` +
+      `• **Enroll & Checkout:** Choose your subscription tier (Tier 1, Tier 2, Tier 3, Lifetime).\n` +
+      `• **Local & International Payments:** Pay via eSewa, Khalti, Bank Transfer, or QR.\n` +
+      `• **Automated Role Verification:** Upload your payment proof on the portal and receive verified Discord roles automatically upon approval.\n\n` +
+      `🌐 Portal Link: **[${portalUrl}](${portalUrl})**`
+    );
+
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
   },
 };

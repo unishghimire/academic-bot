@@ -7,6 +7,7 @@ import {
 import {
   verifyProofCommand,
   paymentMethodsCommand,
+  portalCommand,
 } from './verification.commands.js';
 import { meetingCommand } from './meeting.commands.js';
 import { courseCommand } from './course.commands.js';
@@ -43,6 +44,7 @@ import { setupServerCommand } from './setup.command.js';
 export const allCommands = [
   // Payment & Role Verification
   paymentMethodsCommand,
+  portalCommand,
   verifyProofCommand,
   linkCommand,
   subscriptionCommand,

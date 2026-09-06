@@ -6,6 +6,7 @@ const linking_service_js_1 = require("../../services/linking.service.js");
 const progress_service_js_1 = require("../../services/progress.service.js");
 const client_js_1 = require("../../db/client.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
+const env_js_1 = require("../../config/env.js");
 exports.linkCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('link')
@@ -14,13 +15,18 @@ exports.linkCommand = {
         await interaction.deferReply({ ephemeral: true });
         try {
             const linkData = await linking_service_js_1.linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
+            const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+            const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                .setLabel('🔗 Open Portal to Link Account')
+                .setStyle(discord_js_1.ButtonStyle.Link)
+                .setURL(portalUrl));
             const embed = (0, embed_builder_js_1.createInfoEmbed)('🔗 Account Verification & Linking', `To link your Academy account and activate your roles:\n\n` +
-                `1. Click the secure link below to open the Academy portal:\n` +
-                `👉 **[Click Here to Link Your Account](${linkData.linkingUrl})**\n\n` +
-                `2. Or log into the website and enter your 6-digit linking code:\n` +
+                `1. Click the button below to open the official Student Portal:\n` +
+                `👉 **[Student Portal Link](${portalUrl})**\n\n` +
+                `2. Your 6-digit linking verification code:\n` +
                 `\`\`\`\n${linkData.code}\n\`\`\`\n` +
                 `⏱️ *This code is valid for 15 minutes. Verification happens directly against the payment database.*`);
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.editReply({ embeds: [embed], components: [row] });
         }
         catch (error) {
             await interaction.editReply({
@@ -49,13 +55,18 @@ exports.subscriptionCommand = {
         const expiresDate = user.subscriptionExpiresAt
             ? `<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:F> (<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:R>)`
             : '*No expiration set*';
+        const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+            .setLabel('⚡ Manage Subscription / Renew')
+            .setStyle(discord_js_1.ButtonStyle.Link)
+            .setURL(portalUrl));
         const embed = (0, embed_builder_js_1.createInfoEmbed)('💳 Subscription & Access Status', `**Student Email:** \`${user.email}\`\n` +
             `**Current Status:** \`${user.subscriptionStatus}\`\n` +
             `**Current Tier:** **Tier ${user.currentTier}**\n` +
             `**Plan:** \`${latestSub?.plan || 'Standard'}\`\n` +
             `**Expires/Renews:** ${expiresDate}\n\n` +
             `*Source of Truth: PostgreSQL Database. Synchronized via Academy Admin Payments.*`);
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed], components: [row] });
     },
 };
 exports.progressCommand = {

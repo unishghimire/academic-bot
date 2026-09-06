@@ -14,6 +14,7 @@ export declare const env: {
     ROLE_ADMIN: string;
     ACADEMY_API_SECRET: string;
     ACADEMY_WEBSITE_URL: string;
+    STUDENT_PORTAL_URL: string;
     ADMIN_PANEL_KEY: string;
     SUPABASE_URL: string;
     SUPABASE_ANON_KEY: string;

@@ -14,7 +14,7 @@ async function main() {
   const app = createApiServer(discordClient);
   const server = app.listen(env.PORT, '0.0.0.0', () => {
     logger.info(`🌐 Academy Control Center: http://0.0.0.0:${env.PORT}/admin`);
-    logger.info(`💳 Student Payment Portal: http://0.0.0.0:${env.PORT}/submit-proof.html`);
+    logger.info(`💳 Student Payment Portal: ${env.STUDENT_PORTAL_URL}`);
     logger.info(`📡 Video Progress API: http://0.0.0.0:${env.PORT}/api/progress/watch`);
     logger.info(`📡 Account Linking API: http://0.0.0.0:${env.PORT}/api/link/verify`);
     if (env.STRIPE_SECRET_KEY) {

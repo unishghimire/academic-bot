@@ -1,8 +1,15 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  ChatInputCommandInteraction,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { linkingService } from '../../services/linking.service.js';
 import { progressService } from '../../services/progress.service.js';
 import { prisma } from '../../db/client.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed } from '../../utils/embed-builder.js';
+import { env } from '../../config/env.js';
 import { COLORS } from '../../config/constants.js';
 
 export const linkCommand = {
@@ -16,17 +23,25 @@ export const linkCommand = {
     try {
       const linkData = await linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
 
+      const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('🔗 Open Portal to Link Account')
+          .setStyle(ButtonStyle.Link)
+          .setURL(portalUrl)
+      );
+
       const embed = createInfoEmbed(
         '🔗 Account Verification & Linking',
         `To link your Academy account and activate your roles:\n\n` +
-        `1. Click the secure link below to open the Academy portal:\n` +
-        `👉 **[Click Here to Link Your Account](${linkData.linkingUrl})**\n\n` +
-        `2. Or log into the website and enter your 6-digit linking code:\n` +
+        `1. Click the button below to open the official Student Portal:\n` +
+        `👉 **[Student Portal Link](${portalUrl})**\n\n` +
+        `2. Your 6-digit linking verification code:\n` +
         `\`\`\`\n${linkData.code}\n\`\`\`\n` +
         `⏱️ *This code is valid for 15 minutes. Verification happens directly against the payment database.*`
       );
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed], components: [row] });
     } catch (error: any) {
       await interaction.editReply({
         embeds: [createWarningEmbed('Linking Error', error.message || 'Unable to generate linking code')],
@@ -60,6 +75,14 @@ export const subscriptionCommand = {
       ? `<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:F> (<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:R>)`
       : '*No expiration set*';
 
+    const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('⚡ Manage Subscription / Renew')
+        .setStyle(ButtonStyle.Link)
+        .setURL(portalUrl)
+    );
+
     const embed = createInfoEmbed(
       '💳 Subscription & Access Status',
       `**Student Email:** \`${user.email}\`\n` +
@@ -70,7 +93,7 @@ export const subscriptionCommand = {
       `*Source of Truth: PostgreSQL Database. Synchronized via Academy Admin Payments.*`
     );
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed], components: [row] });
   },
 };
 

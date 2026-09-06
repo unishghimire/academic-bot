@@ -19,6 +19,7 @@ const setup_command_js_1 = require("./setup.command.js");
 exports.allCommands = [
     // Payment & Role Verification
     verification_commands_js_1.paymentMethodsCommand,
+    verification_commands_js_1.portalCommand,
     verification_commands_js_1.verifyProofCommand,
     student_commands_js_1.linkCommand,
     student_commands_js_1.subscriptionCommand,

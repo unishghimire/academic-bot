@@ -30,7 +30,7 @@ function initAuth() {
   if (studentFormLink) {
     studentFormLink.addEventListener('click', (e) => {
       e.preventDefault();
-      const targetUrl = window.STUDENT_PORTAL_URL || (API_URL && API_URL !== window.location.origin ? `${API_URL}/submit-proof.html` : '/submit-proof.html');
+      const targetUrl = window.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
       window.open(targetUrl, '_blank');
     });
   }

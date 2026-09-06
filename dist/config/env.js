@@ -36,7 +36,8 @@ const envSchema = zod_1.z.object({
     CHANNEL_ASSIGNMENT_REVIEWS: zod_1.z.string().optional(),
     // Backend / Platform
     ACADEMY_API_SECRET: zod_1.z.string().default('academy_api_secret_default_key_2026'),
-    ACADEMY_WEBSITE_URL: zod_1.z.string().default('https://academy.example.com'),
+    ACADEMY_WEBSITE_URL: zod_1.z.string().default('https://academic-student-portal.vercel.app'),
+    STUDENT_PORTAL_URL: zod_1.z.string().default('https://academic-student-portal.vercel.app'),
     ADMIN_PANEL_KEY: zod_1.z.string().default('academy_admin_panel_secret_key_32chars'),
     // Stripe (Optional - Admin QR Manual Payments used by default)
     STRIPE_SECRET_KEY: zod_1.z.string().optional(),

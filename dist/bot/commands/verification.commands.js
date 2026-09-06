@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentMethodsCommand = exports.verifyProofCommand = void 0;
+exports.portalCommand = exports.paymentMethodsCommand = exports.verifyProofCommand = void 0;
 const discord_js_1 = require("discord.js");
 const client_1 = require("@prisma/client");
 const manual_payment_service_js_1 = require("../../services/manual-payment.service.js");
@@ -164,14 +164,19 @@ exports.paymentMethodsCommand = {
                     block += `• **QR Code:** [Click to View QR](${m.qrCodeUrl})\n`;
                 return block;
             });
-            const portalUrl = `http://localhost:${env_js_1.env.PORT}/submit-proof.html`;
+            const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+            const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                .setLabel('💳 Open Student Payment Portal')
+                .setStyle(discord_js_1.ButtonStyle.Link)
+                .setURL(portalUrl));
             const embed = (0, embed_builder_js_1.createInfoEmbed)('💳 Academy Payment Methods & Subscription Instructions', `To gain instant access to subscriber roles and private channels, make your payment through any of the verified channels below:\n\n` +
                 methodBlocks.join('\n') +
                 `\n📌 **After Payment:**\n` +
                 `1. Upload your screenshot/receipt at: **[Student Payment Portal](${portalUrl})**\n` +
-                `2. Or run \`/link\` with your student email.\n` +
-                `3. Our staff will verify your proof and your role will be assigned automatically!`);
-            await interaction.editReply({ embeds: [embed] });
+                `2. Our staff will verify your proof in the admin panel.\n` +
+                `3. Your Discord roles (@Tier-1, @Premium) and private channel access are assigned automatically!\n\n` +
+                `👉 Click the button below to open the payment portal directly:`);
+            await interaction.editReply({ embeds: [embed], components: [row] });
         }
         catch (err) {
             logger_js_1.logger.error({ err }, 'Failed to fetch payment methods');
@@ -179,6 +184,24 @@ exports.paymentMethodsCommand = {
                 embeds: [(0, embed_builder_js_1.createErrorEmbed)('Error', 'Unable to retrieve payment methods at this time.')],
             });
         }
+    },
+};
+exports.portalCommand = {
+    data: new discord_js_1.SlashCommandBuilder()
+        .setName('portal')
+        .setDescription('Direct link to open the Academy Student Payment & Verification Portal'),
+    async execute(interaction) {
+        const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+            .setLabel('💳 Open Student Payment Portal')
+            .setStyle(discord_js_1.ButtonStyle.Link)
+            .setURL(portalUrl));
+        const embed = (0, embed_builder_js_1.createInfoEmbed)('⚡ Academy Student Payment Portal', `Welcome to **The Elite Circle Academy** official payment & verification portal!\n\n` +
+            `• **Enroll & Checkout:** Choose your subscription tier (Tier 1, Tier 2, Tier 3, Lifetime).\n` +
+            `• **Local & International Payments:** Pay via eSewa, Khalti, Bank Transfer, or QR.\n` +
+            `• **Automated Role Verification:** Upload your payment proof on the portal and receive verified Discord roles automatically upon approval.\n\n` +
+            `🌐 Portal Link: **[${portalUrl}](${portalUrl})**`);
+        await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
     },
 };
 //# sourceMappingURL=verification.commands.js.map
