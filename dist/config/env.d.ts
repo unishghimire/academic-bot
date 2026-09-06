@@ -29,4 +29,6 @@ export declare const env: {
     STRIPE_SECRET_KEY?: string | undefined;
     STRIPE_WEBHOOK_SECRET?: string | undefined;
     SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
+    RENDER_EXTERNAL_URL?: string | undefined;
+    APP_URL?: string | undefined;
 };

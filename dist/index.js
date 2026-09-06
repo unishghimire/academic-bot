@@ -20,7 +20,24 @@ async function main() {
             logger_js_1.logger.info(`📡 Stripe Webhook: http://0.0.0.0:${env_js_1.env.PORT}/webhooks/stripe`);
         }
     });
-    // 3. Start Discord Bot
+    // 3. Automated 24/7 Keep-Alive Self-Pinger for Render / Cloud Hosts
+    const keepAliveTarget = env_js_1.env.RENDER_EXTERNAL_URL || env_js_1.env.APP_URL;
+    if (keepAliveTarget) {
+        const pingUrl = `${keepAliveTarget.replace(/\/$/, '')}/health`;
+        logger_js_1.logger.info({ pingUrl }, '🕒 Initializing 24/7 keep-alive worker to prevent host spin-down (every 5 mins)...');
+        setInterval(async () => {
+            try {
+                const res = await fetch(pingUrl);
+                if (res.ok) {
+                    logger_js_1.logger.info({ status: res.status }, '💓 Keep-alive self-ping successful: service kept active 24/7');
+                }
+            }
+            catch (err) {
+                logger_js_1.logger.warn({ err: err.message }, 'Keep-alive self-ping attempt failed');
+            }
+        }, 5 * 60 * 1000);
+    }
+    // 4. Start Discord Bot
     await (0, client_js_2.startBot)(discordClient);
     // 4. Verify PostgreSQL Database connection in background
     (0, client_js_1.checkDbConnection)().then(dbConnected => {

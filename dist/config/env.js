@@ -45,6 +45,9 @@ const envSchema = zod_1.z.object({
     SUPABASE_URL: zod_1.z.string().default('https://snuunauwtuqyibmcajzh.supabase.co'),
     SUPABASE_ANON_KEY: zod_1.z.string().default('sb_publishable_r_4B33JNzqJuZnmfYd_Yrg_rFVqoj_4'),
     SUPABASE_SERVICE_ROLE_KEY: zod_1.z.string().optional(),
+    // Hosting / Keep-Alive URL
+    RENDER_EXTERNAL_URL: zod_1.z.string().optional(),
+    APP_URL: zod_1.z.string().optional(),
 });
 exports.env = envSchema.parse(process.env);
 //# sourceMappingURL=env.js.map

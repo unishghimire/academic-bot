@@ -48,6 +48,10 @@ const envSchema = z.object({
   SUPABASE_URL: z.string().default('https://snuunauwtuqyibmcajzh.supabase.co'),
   SUPABASE_ANON_KEY: z.string().default('sb_publishable_r_4B33JNzqJuZnmfYd_Yrg_rFVqoj_4'),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+
+  // Hosting / Keep-Alive URL
+  RENDER_EXTERNAL_URL: z.string().optional(),
+  APP_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
