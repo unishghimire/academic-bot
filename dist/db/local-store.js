@@ -181,6 +181,14 @@ exports.localStore = {
         saveData(data);
         return user;
     },
+    findUserById(id) {
+        const data = ensureDataFile();
+        return (data.users || []).find((u) => u.id === id) || null;
+    },
+    findUserByDiscordId(discordId) {
+        const data = ensureDataFile();
+        return (data.users || []).find((u) => u.discordId === discordId) || null;
+    },
     // Live Classes / Meetings
     getLiveClasses() {
         const data = ensureDataFile();

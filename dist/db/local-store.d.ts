@@ -12,6 +12,8 @@ export declare const localStore: {
     saveAuditLog(log: any): void;
     getUsers(): any[];
     saveUser(user: any): any;
+    findUserById(id: string): any | null;
+    findUserByDiscordId(discordId: string): any | null;
     getLiveClasses(): any[];
     saveLiveClass(meeting: any): any;
     findLiveClassById(id: string): any | null;

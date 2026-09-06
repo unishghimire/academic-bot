@@ -5,6 +5,8 @@ const discord_js_1 = require("discord.js");
 const linking_service_js_1 = require("../../services/linking.service.js");
 const progress_service_js_1 = require("../../services/progress.service.js");
 const client_js_1 = require("../../db/client.js");
+const local_store_js_1 = require("../../db/local-store.js");
+const supabase_js_1 = require("../../db/supabase.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const env_js_1 = require("../../config/env.js");
 exports.linkCommand = {
@@ -41,10 +43,51 @@ exports.subscriptionCommand = {
         .setDescription('View your current Academy membership, plan, and renewal date'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-        const user = await client_js_1.prisma.user.findUnique({
-            where: { discordId: interaction.user.id },
-            include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
-        });
+        let user = null;
+        // 1. Check PostgreSQL if online
+        if ((0, client_js_1.isDatabaseOnline)()) {
+            try {
+                user = await client_js_1.prisma.user.findUnique({
+                    where: { discordId: interaction.user.id },
+                    include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
+                });
+            }
+            catch {
+                // Fallback
+            }
+        }
+        // 2. Check localStore
+        if (!user) {
+            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+        }
+        // 3. Check Supabase payment_verifications
+        if (!user) {
+            const supabase = (0, supabase_js_1.getSupabaseClient)();
+            if (supabase) {
+                try {
+                    const { data } = await supabase
+                        .from('payment_verifications')
+                        .select('*')
+                        .or(`discord_id.eq.${interaction.user.id},discord_username.ilike.%${interaction.user.username}%`)
+                        .in('status', ['verified', 'approved', 'Verified', 'Approved', 'VERIFIED', 'APPROVED'])
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (data && data.length > 0) {
+                        const rec = data[0];
+                        user = {
+                            email: rec.email || `${interaction.user.username}@discord.local`,
+                            subscriptionStatus: 'ACTIVE',
+                            currentTier: rec.tier_number || 1,
+                            subscriptionExpiresAt: new Date(new Date(rec.created_at).getTime() + (rec.access_duration_days || 30) * 24 * 60 * 60 * 1000),
+                            subscriptions: [{ plan: rec.plan_name || `Tier ${rec.tier_number || 1}` }],
+                        };
+                    }
+                }
+                catch {
+                    // Ignore
+                }
+            }
+        }
         if (!user) {
             await interaction.editReply({
                 embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'No Academy account is linked to this Discord profile. Use `/link` to connect.')],

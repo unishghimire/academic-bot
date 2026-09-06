@@ -7,7 +7,9 @@ import {
 } from 'discord.js';
 import { linkingService } from '../../services/linking.service.js';
 import { progressService } from '../../services/progress.service.js';
-import { prisma } from '../../db/client.js';
+import { prisma, isDatabaseOnline } from '../../db/client.js';
+import { localStore } from '../../db/local-store.js';
+import { getSupabaseClient } from '../../db/supabase.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed } from '../../utils/embed-builder.js';
 import { env } from '../../config/env.js';
 import { COLORS } from '../../config/constants.js';
@@ -58,10 +60,53 @@ export const subscriptionCommand = {
   async execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const user = await prisma.user.findUnique({
-      where: { discordId: interaction.user.id },
-      include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
-    });
+    let user: any = null;
+
+    // 1. Check PostgreSQL if online
+    if (isDatabaseOnline()) {
+      try {
+        user = await prisma.user.findUnique({
+          where: { discordId: interaction.user.id },
+          include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
+        });
+      } catch {
+        // Fallback
+      }
+    }
+
+    // 2. Check localStore
+    if (!user) {
+      user = localStore.findUserByDiscordId(interaction.user.id);
+    }
+
+    // 3. Check Supabase payment_verifications
+    if (!user) {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { data } = await supabase
+            .from('payment_verifications')
+            .select('*')
+            .or(`discord_id.eq.${interaction.user.id},discord_username.ilike.%${interaction.user.username}%`)
+            .in('status', ['verified', 'approved', 'Verified', 'Approved', 'VERIFIED', 'APPROVED'])
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (data && data.length > 0) {
+            const rec = data[0];
+            user = {
+              email: rec.email || `${interaction.user.username}@discord.local`,
+              subscriptionStatus: 'ACTIVE',
+              currentTier: rec.tier_number || 1,
+              subscriptionExpiresAt: new Date(new Date(rec.created_at).getTime() + (rec.access_duration_days || 30) * 24 * 60 * 60 * 1000),
+              subscriptions: [{ plan: rec.plan_name || `Tier ${rec.tier_number || 1}` }],
+            };
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    }
 
     if (!user) {
       await interaction.editReply({

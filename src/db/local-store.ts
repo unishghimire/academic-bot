@@ -189,6 +189,16 @@ export const localStore = {
     return user;
   },
 
+  findUserById(id: string): any | null {
+    const data = ensureDataFile();
+    return ((data as any).users || []).find((u: any) => u.id === id) || null;
+  },
+
+  findUserByDiscordId(discordId: string): any | null {
+    const data = ensureDataFile();
+    return ((data as any).users || []).find((u: any) => u.discordId === discordId) || null;
+  },
+
   // Live Classes / Meetings
   getLiveClasses(): any[] {
     const data = ensureDataFile();
