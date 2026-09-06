@@ -79,15 +79,26 @@ function createDiscordClient() {
     return client;
 }
 async function startBot(client) {
-    if (env_js_1.env.DISCORD_TOKEN === 'mock_token') {
-        logger_js_1.logger.warn('DISCORD_TOKEN is set to mock_token. Discord bot login skipped for dev/mock mode.');
+    const token = env_js_1.env.DISCORD_TOKEN?.trim().replace(/^["']|["']$/g, '');
+    if (!token || token === 'mock_token') {
+        logger_js_1.logger.warn('⚠️ DISCORD_TOKEN is set to mock_token or empty. Discord bot login skipped for dev/mock mode. Set DISCORD_TOKEN in Render Environment Variables to bring bot online.');
         return;
     }
     try {
-        await client.login(env_js_1.env.DISCORD_TOKEN);
+        logger_js_1.logger.info('Attempting Discord client login...');
+        await client.login(token);
+        logger_js_1.logger.info('Discord client logged in successfully.');
     }
     catch (error) {
-        logger_js_1.logger.error({ err: error }, 'Failed to login to Discord');
+        if (error?.code === 'DisallowedIntents' || error?.message?.includes('disallowed intents')) {
+            logger_js_1.logger.fatal('❌ [CRITICAL DISCORD ERROR - DisallowedIntents]: You MUST enable "Server Members Intent" in the Discord Developer Portal (https://discord.com/developers/applications) under Bot -> Privileged Gateway Intents.');
+        }
+        else if (error?.code === 'TokenInvalid' || error?.message?.includes('An invalid token was provided')) {
+            logger_js_1.logger.fatal('❌ [CRITICAL DISCORD ERROR - TokenInvalid]: DISCORD_TOKEN is invalid. Go to Discord Developer Portal -> Bot -> Click "Reset Token" and paste the new token in Render.');
+        }
+        else {
+            logger_js_1.logger.error({ err: error }, '❌ Failed to login to Discord');
+        }
     }
 }
 //# sourceMappingURL=client.js.map
