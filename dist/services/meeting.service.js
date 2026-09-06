@@ -10,7 +10,7 @@ class MeetingService {
         this.db = db;
     }
     isOffline() {
-        return this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)();
+        return this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)();
     }
     /**
      * Schedule a new meeting/class

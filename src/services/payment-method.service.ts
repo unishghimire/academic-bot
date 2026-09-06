@@ -1,5 +1,5 @@
 import { PrismaClient, PaymentMethod, ActorType } from '@prisma/client';
-import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
 import { auditService as defaultAuditService, AuditService } from './audit.service.js';
 import { localStore } from '../db/local-store.js';
 
@@ -35,7 +35,7 @@ export class PaymentMethodService {
   }
 
   private isOffline(): boolean {
-    return this.db === defaultPrisma && !isDatabaseOnline();
+    return this.db === defaultPrisma && !isPostgresOnline();
   }
 
   /**

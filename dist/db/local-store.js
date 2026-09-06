@@ -223,6 +223,38 @@ exports.localStore = {
             return true;
         }
         return false;
+    },
+    // Account Linking Codes
+    getLinkingCodes() {
+        const data = ensureDataFile();
+        return data.linkingCodes || [];
+    },
+    saveLinkingCode(linkingCode) {
+        const data = ensureDataFile();
+        if (!data.linkingCodes)
+            data.linkingCodes = [];
+        // Invalidate existing unused codes for this discordId
+        data.linkingCodes = data.linkingCodes.filter(c => c.discordId !== linkingCode.discordId || c.usedAt != null);
+        data.linkingCodes.push(linkingCode);
+        saveData(data);
+        return linkingCode;
+    },
+    findLinkingCode(code) {
+        const data = ensureDataFile();
+        const codes = data.linkingCodes || [];
+        return codes.find(c => c.code.toUpperCase() === code.toUpperCase()) || null;
+    },
+    markLinkingCodeUsed(code) {
+        const data = ensureDataFile();
+        if (!data.linkingCodes)
+            return false;
+        const item = data.linkingCodes.find(c => c.code.toUpperCase() === code.toUpperCase());
+        if (item) {
+            item.usedAt = new Date();
+            saveData(data);
+            return true;
+        }
+        return false;
     }
 };
 //# sourceMappingURL=local-store.js.map

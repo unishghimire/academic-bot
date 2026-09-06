@@ -1,5 +1,5 @@
 import { ActorType, PrismaClient } from '@prisma/client';
-import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { TextChannel, EmbedBuilder } from 'discord.js';
 import { COLORS } from '../config/constants.js';
@@ -23,7 +23,7 @@ export class AuditService {
    * Records an immutable audit log entry in the database and optionally publishes to Discord #audit-logs
    */
   async log(params: AuditLogParams, auditChannel?: TextChannel | null) {
-    if (this.db === defaultPrisma && !isDatabaseOnline()) {
+    if (this.db === defaultPrisma && !isPostgresOnline()) {
       localStore.saveAuditLog(params);
       return;
     }

@@ -7,6 +7,7 @@ export interface GeneratedLinkCode {
 export declare class LinkingService {
     private db;
     constructor(db?: PrismaClient);
+    private isOffline;
     /**
      * Generates a short-lived (15 min) 6-character linking code initiated from /link in Discord
      */

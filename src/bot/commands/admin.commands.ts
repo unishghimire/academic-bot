@@ -9,6 +9,8 @@ import { xpService } from '../../services/xp.service.js';
 import { createSuccessEmbed, createWarningEmbed, createInfoEmbed } from '../../utils/embed-builder.js';
 import { SubscriptionStatus } from '@prisma/client';
 import { localStore } from '../../db/local-store.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../utils/logger.js';
 
 export const adminDashboardCommand = {
   data: new SlashCommandBuilder()
@@ -76,7 +78,7 @@ export const adminDashboardCommand = {
       `• Tier 2 (Advanced): **${tier2Count}**\n` +
       `• Tier 3 (Mastery): **${tier3Count}**\n` +
       `• Graduates: 🏆 **${graduateCount}**\n\n` +
-      `*Database source of truth operational.*`
+      `*Database single source of truth: Active.*`
     );
 
     await interaction.editReply({ embeds: [embed] });
@@ -100,31 +102,79 @@ export const grantPremiumCommand = {
     const target = interaction.options.getUser('student', true);
     const days = interaction.options.getInteger('days', true);
     const reason = interaction.options.getString('reason', true);
-
-    let user = await prisma.user.findUnique({ where: { discordId: target.id } });
-
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          discordId: target.id,
-          accountId: `manual_${target.id}`,
-          email: `${target.username}@discord.local`,
-          subscriptionStatus: SubscriptionStatus.ACTIVE,
-          currentTier: 1,
-        },
-      });
-    }
-
-    const previousStatus = user.subscriptionStatus;
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        subscriptionStatus: SubscriptionStatus.ACTIVE,
-        subscriptionExpiresAt: expiresAt,
-      },
-    });
+    let user: any = null;
+
+    if (isPostgresOnline()) {
+      try {
+        user = await prisma.user.findUnique({ where: { discordId: target.id } });
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              discordId: target.id,
+              accountId: `manual_${target.id}`,
+              email: `${target.username}@discord.local`,
+              subscriptionStatus: SubscriptionStatus.ACTIVE,
+              currentTier: 1,
+            },
+          });
+        }
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscriptionStatus: SubscriptionStatus.ACTIVE,
+            subscriptionExpiresAt: expiresAt,
+          },
+        });
+      } catch {
+        // Fallback below
+      }
+    }
+
+    if (!user) {
+      user = localStore.findUserByDiscordId(target.id) || {
+        id: `usr_${target.id}`,
+        discordId: target.id,
+        accountId: `manual_${target.id}`,
+        email: `${target.username}@discord.local`,
+      };
+      user.subscriptionStatus = SubscriptionStatus.ACTIVE;
+      user.currentTier = user.currentTier || 1;
+      user.subscriptionExpiresAt = expiresAt;
+      localStore.saveUser(user);
+    }
+
+    // Sync to Supabase if connected
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase.from('payment_verifications').upsert({
+          discord_id: target.id,
+          discord_username: target.username,
+          student_name: target.displayName || target.username,
+          email: `${target.username}@discord.local`,
+          amount: 0,
+          status: 'approved',
+          tier_number: 1,
+          access_duration_days: days,
+          is_discord_verified: true,
+          payment_method: 'Admin Manual Grant',
+          transaction_id: `ADMIN_${Date.now()}`,
+        }, { onConflict: 'discord_id' });
+      } catch (err) {
+        logger.warn({ err }, 'Could not upsert into Supabase for admin grant');
+      }
+    }
+
+    // Grant Discord roles directly
+    if (interaction.guild) {
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+      if (member) {
+        if (env.ROLE_PREMIUM) await member.roles.add(env.ROLE_PREMIUM).catch(() => {});
+        if (env.ROLE_TIER_1) await member.roles.add(env.ROLE_TIER_1).catch(() => {});
+      }
+    }
 
     await auditService.log({
       actorType: 'ADMIN',
@@ -133,12 +183,8 @@ export const grantPremiumCommand = {
       targetType: 'USER',
       targetId: user.id,
       reason,
-      before: { status: previousStatus },
       after: { status: SubscriptionStatus.ACTIVE, expiresAt },
     });
-
-    // Reconcile roles immediately
-    await roleSyncService.syncUserRoles(user.id, interaction.client);
 
     await interaction.editReply({
       embeds: [
@@ -167,35 +213,71 @@ export const revokePremiumCommand = {
     const target = interaction.options.getUser('student', true);
     const reason = interaction.options.getString('reason', true);
 
-    const user = await prisma.user.findUnique({ where: { discordId: target.id } });
+    let user: any = null;
 
-    if (!user) {
-      await interaction.editReply({
-        embeds: [createWarningEmbed('Not Found', 'User is not in the Academy database.')],
-      });
-      return;
+    if (isPostgresOnline()) {
+      try {
+        user = await prisma.user.findUnique({ where: { discordId: target.id } });
+        if (user) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { subscriptionStatus: SubscriptionStatus.SUSPENDED },
+          });
+        }
+      } catch {
+        // Fallback below
+      }
     }
 
-    const previousStatus = user.subscriptionStatus;
+    if (!user) {
+      user = localStore.findUserByDiscordId(target.id);
+    }
+    if (user) {
+      user.subscriptionStatus = SubscriptionStatus.SUSPENDED;
+      localStore.saveUser(user);
+    }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { subscriptionStatus: SubscriptionStatus.SUSPENDED },
-    });
+    // Update Supabase if connected
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        await supabase
+          .from('payment_verifications')
+          .update({ status: 'revoked', is_discord_verified: false })
+          .or(`discord_id.eq.${target.id},discord_username.ilike.%${target.username}%`);
+      } catch (err) {
+        logger.warn({ err }, 'Could not update Supabase for admin revoke');
+      }
+    }
+
+    // Strip roles immediately from Discord member
+    if (interaction.guild) {
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+      if (member) {
+        const rolesToRemove = [
+          env.ROLE_PREMIUM,
+          env.ROLE_TIER_1,
+          env.ROLE_TIER_2,
+          env.ROLE_TIER_3,
+          env.ROLE_GRADUATE,
+        ].filter(Boolean);
+        for (const r of rolesToRemove) {
+          if (member.roles.cache.has(r)) {
+            await member.roles.remove(r).catch(() => {});
+          }
+        }
+      }
+    }
 
     await auditService.log({
       actorType: 'ADMIN',
       actorId: interaction.user.id,
       action: 'ADMIN_REVOKE_PREMIUM',
       targetType: 'USER',
-      targetId: user.id,
+      targetId: user?.id || target.id,
       reason,
-      before: { status: previousStatus },
       after: { status: SubscriptionStatus.SUSPENDED },
     });
-
-    // Strip roles immediately via reconciler
-    await roleSyncService.syncUserRoles(user.id, interaction.client);
 
     await interaction.editReply({
       embeds: [
@@ -237,20 +319,37 @@ export const unlockTierCommand = {
     const targetTier = interaction.options.getInteger('tier', true);
     const reason = interaction.options.getString('reason', true);
 
-    const user = await prisma.user.findUnique({ where: { discordId: target.id } });
-
+    let user: any = null;
+    if (isPostgresOnline()) {
+      try {
+        user = await prisma.user.findUnique({ where: { discordId: target.id } });
+      } catch {
+        // Fallback below
+      }
+    }
     if (!user) {
-      await interaction.editReply({
-        embeds: [createWarningEmbed('Not Found', 'User has not linked an Academy account.')],
-      });
-      return;
+      user = localStore.findUserByDiscordId(target.id);
     }
 
-    // Apply via TierEngine admin override
-    await tierEngine.applyAdminOverride(user.id, targetTier, interaction.user.id, reason);
+    if (!user) {
+      user = localStore.saveUser({
+        id: `usr_${target.id}`,
+        discordId: target.id,
+        currentTier: targetTier,
+      });
+    } else {
+      user.currentTier = targetTier;
+      localStore.saveUser(user);
+    }
 
-    // Sync Discord roles immediately
-    await roleSyncService.syncUserRoles(user.id, interaction.client);
+    // Direct role assignment
+    if (interaction.guild) {
+      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+      if (member) {
+        const tierRoleId = targetTier === 1 ? env.ROLE_TIER_1 : targetTier === 2 ? env.ROLE_TIER_2 : env.ROLE_TIER_3;
+        if (tierRoleId) await member.roles.add(tierRoleId).catch(() => {});
+      }
+    }
 
     await interaction.editReply({
       embeds: [
@@ -281,7 +380,17 @@ export const addXpCommand = {
     const amount = interaction.options.getInteger('amount', true);
     const reason = interaction.options.getString('reason', true);
 
-    const user = await prisma.user.findUnique({ where: { discordId: target.id } });
+    let user: any = null;
+    if (isPostgresOnline()) {
+      try {
+        user = await prisma.user.findUnique({ where: { discordId: target.id } });
+      } catch {
+        // Fallback
+      }
+    }
+    if (!user) {
+      user = localStore.findUserByDiscordId(target.id);
+    }
 
     if (!user) {
       await interaction.editReply({
@@ -290,13 +399,9 @@ export const addXpCommand = {
       return;
     }
 
-    const newTotal = await xpService.awardXp(
-      user.id,
-      amount,
-      `Admin Grant by ${interaction.user.tag}: ${reason}`,
-      'admin_grant',
-      interaction.user.id
-    );
+    const newTotal = isPostgresOnline()
+      ? await xpService.awardXp(user.id, amount, `Admin Grant: ${reason}`, 'admin_grant', interaction.user.id)
+      : amount;
 
     await auditService.log({
       actorType: 'ADMIN',
@@ -312,7 +417,7 @@ export const addXpCommand = {
       embeds: [
         createSuccessEmbed(
           'XP Awarded',
-          `Added **+${amount} XP** to <@${target.id}>.\nNew Total: **${newTotal.toLocaleString()} XP**\nReason: *${reason}*`
+          `Added **+${amount} XP** to <@${target.id}>.\nReason: *${reason}*`
         ),
       ],
     });
@@ -375,14 +480,21 @@ export const serverStatsCommand = {
     }
 
     const totalMembers = guild.memberCount;
-    const totalAuditEntries = await prisma.auditLog.count();
+    let totalAuditEntries = localStore.getAuditLogs(100).length;
+
+    if (isPostgresOnline()) {
+      try {
+        totalAuditEntries = await prisma.auditLog.count();
+      } catch {
+        // Fallback
+      }
+    }
 
     const embed = createInfoEmbed(
       '📊 Server & Audit Health',
       `**Total Discord Members:** ${totalMembers}\n` +
       `**Total Audit Entries:** ${totalAuditEntries}\n` +
-      `**Reconciler Status:** Active (runs every 10 mins)\n` +
-      `**Database Single Source of Truth:** Connected`
+      `**Database Single Source of Truth:** Connected (Supabase Cloud)`
     );
 
     await interaction.editReply({ embeds: [embed] });
@@ -405,30 +517,36 @@ export const resetProgressCommand = {
     const target = interaction.options.getUser('student', true);
     const reason = interaction.options.getString('reason', true);
 
-    const user = await prisma.user.findUnique({ where: { discordId: target.id } });
-
-    if (!user) {
-      await interaction.editReply({
-        embeds: [createWarningEmbed('Not Found', 'User not found in Academy database.')],
-      });
-      return;
+    let user: any = null;
+    if (isPostgresOnline()) {
+      try {
+        user = await prisma.user.findUnique({ where: { discordId: target.id } });
+        if (user) {
+          await prisma.lessonProgress.deleteMany({ where: { userId: user.id } });
+          await prisma.user.update({ where: { id: user.id }, data: { currentTier: 1 } });
+        }
+      } catch {
+        // Fallback
+      }
     }
 
-    await prisma.lessonProgress.deleteMany({ where: { userId: user.id } });
-    await prisma.user.update({ where: { id: user.id }, data: { currentTier: 1 } });
+    if (!user) {
+      user = localStore.findUserByDiscordId(target.id);
+    }
+    if (user) {
+      user.currentTier = 1;
+      localStore.saveUser(user);
+    }
 
     await auditService.log({
       actorType: 'ADMIN',
       actorId: interaction.user.id,
       action: 'ADMIN_RESET_PROGRESS',
       targetType: 'USER',
-      targetId: user.id,
+      targetId: user?.id || target.id,
       reason,
-      before: { currentTier: user.currentTier },
       after: { currentTier: 1, reset: true },
     });
-
-    await roleSyncService.syncUserRoles(user.id, interaction.client);
 
     await interaction.editReply({
       embeds: [

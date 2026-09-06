@@ -13,7 +13,7 @@ class PaymentMethodService {
         this.auditor = auditor;
     }
     isOffline() {
-        return this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)();
+        return this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)();
     }
     /**
      * List all active payment methods for student checkout / proof submission

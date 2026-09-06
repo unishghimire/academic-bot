@@ -1,5 +1,5 @@
 import { PrismaClient, LiveClass } from '@prisma/client';
-import { prisma as defaultPrisma, isDatabaseOnline } from '../db/client.js';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
 import { localStore } from '../db/local-store.js';
 import { logger } from '../utils/logger.js';
 
@@ -15,7 +15,7 @@ export class MeetingService {
   constructor(private db: PrismaClient = defaultPrisma) {}
 
   private isOffline(): boolean {
-    return this.db === defaultPrisma && !isDatabaseOnline();
+    return this.db === defaultPrisma && !isPostgresOnline();
   }
 
   /**

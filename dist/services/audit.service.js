@@ -15,7 +15,7 @@ class AuditService {
      * Records an immutable audit log entry in the database and optionally publishes to Discord #audit-logs
      */
     async log(params, auditChannel) {
-        if (this.db === client_js_1.prisma && !(0, client_js_1.isDatabaseOnline)()) {
+        if (this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)()) {
             local_store_js_1.localStore.saveAuditLog(params);
             return;
         }

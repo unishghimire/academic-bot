@@ -2,10 +2,22 @@ import fs from 'fs';
 import path from 'path';
 import { PaymentMethod, ManualPayment, ManualPaymentStatus } from '@prisma/client';
 
+export interface LocalLinkingCode {
+  id: string;
+  userId: string;
+  discordId: string;
+  code: string;
+  expiresAt: string | Date;
+  usedAt?: string | Date | null;
+}
+
 interface LocalData {
   paymentMethods: PaymentMethod[];
   manualPayments: ManualPayment[];
   auditLogs: any[];
+  users?: any[];
+  liveClasses?: any[];
+  linkingCodes?: LocalLinkingCode[];
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -229,6 +241,42 @@ export const localStore = {
     const idx = (data as any).liveClasses.findIndex((m: any) => m.id === id);
     if (idx >= 0) {
       (data as any).liveClasses.splice(idx, 1);
+      saveData(data);
+      return true;
+    }
+    return false;
+  },
+
+  // Account Linking Codes
+  getLinkingCodes(): LocalLinkingCode[] {
+    const data = ensureDataFile();
+    return data.linkingCodes || [];
+  },
+
+  saveLinkingCode(linkingCode: LocalLinkingCode): LocalLinkingCode {
+    const data = ensureDataFile();
+    if (!data.linkingCodes) data.linkingCodes = [];
+    // Invalidate existing unused codes for this discordId
+    data.linkingCodes = data.linkingCodes.filter(
+      c => c.discordId !== linkingCode.discordId || c.usedAt != null
+    );
+    data.linkingCodes.push(linkingCode);
+    saveData(data);
+    return linkingCode;
+  },
+
+  findLinkingCode(code: string): LocalLinkingCode | null {
+    const data = ensureDataFile();
+    const codes = data.linkingCodes || [];
+    return codes.find(c => c.code.toUpperCase() === code.toUpperCase()) || null;
+  },
+
+  markLinkingCodeUsed(code: string): boolean {
+    const data = ensureDataFile();
+    if (!data.linkingCodes) return false;
+    const item = data.linkingCodes.find(c => c.code.toUpperCase() === code.toUpperCase());
+    if (item) {
+      item.usedAt = new Date();
       saveData(data);
       return true;
     }

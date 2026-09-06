@@ -1,4 +1,12 @@
 import { PaymentMethod, ManualPayment, ManualPaymentStatus } from '@prisma/client';
+export interface LocalLinkingCode {
+    id: string;
+    userId: string;
+    discordId: string;
+    code: string;
+    expiresAt: string | Date;
+    usedAt?: string | Date | null;
+}
 export declare const localStore: {
     getPaymentMethods(onlyActive?: boolean): PaymentMethod[];
     savePaymentMethod(method: PaymentMethod): PaymentMethod;
@@ -18,4 +26,8 @@ export declare const localStore: {
     saveLiveClass(meeting: any): any;
     findLiveClassById(id: string): any | null;
     deleteLiveClass(id: string): boolean;
+    getLinkingCodes(): LocalLinkingCode[];
+    saveLinkingCode(linkingCode: LocalLinkingCode): LocalLinkingCode;
+    findLinkingCode(code: string): LocalLinkingCode | null;
+    markLinkingCodeUsed(code: string): boolean;
 };

@@ -16,8 +16,80 @@ exports.linkCommand = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
         try {
-            const linkData = await linking_service_js_1.linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
+            const supabase = (0, supabase_js_1.getSupabaseClient)();
             const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+            // 1. Check if user already has an approved payment verification in Supabase
+            if (supabase) {
+                try {
+                    const { data } = await supabase
+                        .from('payment_verifications')
+                        .select('*')
+                        .or(`discord_id.eq.${interaction.user.id},discord_username.ilike.%${interaction.user.username}%`)
+                        .in('status', ['verified', 'approved', 'Verified', 'Approved', 'VERIFIED', 'APPROVED'])
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (data && data.length > 0) {
+                        const rec = data[0];
+                        // Reconcile and assign Discord roles immediately
+                        if (interaction.guild) {
+                            const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+                            if (member) {
+                                if (env_js_1.env.ROLE_PREMIUM)
+                                    await member.roles.add(env_js_1.env.ROLE_PREMIUM).catch(() => { });
+                                const tier = rec.tier_number || 1;
+                                const tierRoleId = tier === 1 ? env_js_1.env.ROLE_TIER_1 : tier === 2 ? env_js_1.env.ROLE_TIER_2 : env_js_1.env.ROLE_TIER_3;
+                                if (tierRoleId)
+                                    await member.roles.add(tierRoleId).catch(() => { });
+                            }
+                        }
+                        // Mark verified in Supabase if needed
+                        if (!rec.is_discord_verified || rec.discord_id !== interaction.user.id) {
+                            await supabase
+                                .from('payment_verifications')
+                                .update({ discord_id: interaction.user.id, discord_username: interaction.user.username, is_discord_verified: true })
+                                .eq('id', rec.id);
+                        }
+                        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                            .setLabel('💳 Open Student Portal')
+                            .setStyle(discord_js_1.ButtonStyle.Link)
+                            .setURL(portalUrl));
+                        const embed = (0, embed_builder_js_1.createSuccessEmbed)('🎉 Account Verified & Connected!', `Welcome <@${interaction.user.id}>! Your Academy subscription has been verified in the payment database:\n\n` +
+                            `• **Tier:** **Tier ${rec.tier_number || 1}**\n` +
+                            `• **Status:** **Active Subscription**\n` +
+                            `• **Student:** \`${rec.student_name || interaction.user.username}\`\n\n` +
+                            `✅ Your **@Premium** and **@Tier-${rec.tier_number || 1}** roles are active! Use \`/subscription\` to view your plan or \`/meeting\` to see scheduled live classes.`);
+                        await interaction.editReply({ embeds: [embed], components: [row] });
+                        return;
+                    }
+                    // 2. Check if there is a pending payment verification
+                    const { data: pendingData } = await supabase
+                        .from('payment_verifications')
+                        .select('*')
+                        .or(`discord_id.eq.${interaction.user.id},discord_username.ilike.%${interaction.user.username}%`)
+                        .in('status', ['pending', 'Pending', 'PENDING'])
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (pendingData && pendingData.length > 0) {
+                        const pending = pendingData[0];
+                        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                            .setLabel('💳 Check Status on Portal')
+                            .setStyle(discord_js_1.ButtonStyle.Link)
+                            .setURL(portalUrl));
+                        const embed = (0, embed_builder_js_1.createInfoEmbed)('⏳ Payment Verification Under Review', `We found your pending payment submission:\n\n` +
+                            `• **Transaction ID:** \`${pending.transaction_id || 'N/A'}\`\n` +
+                            `• **Submitted For:** Tier ${pending.tier_number || 1}\n` +
+                            `• **Status:** ⏳ **Under Admin Review**\n\n` +
+                            `Our staff verifies payments in the Admin Panel. As soon as approved, the bot will automatically grant your roles and send you a private welcome DM!`);
+                        await interaction.editReply({ embeds: [embed], components: [row] });
+                        return;
+                    }
+                }
+                catch {
+                    // Fall through to link code generation
+                }
+            }
+            // 3. Fallback: generate 6-digit linking code (offline / Supabase safe)
+            const linkData = await linking_service_js_1.linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
             const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
                 .setLabel('🔗 Open Portal to Link Account')
                 .setStyle(discord_js_1.ButtonStyle.Link)
@@ -27,7 +99,7 @@ exports.linkCommand = {
                 `👉 **[Student Portal Link](${portalUrl})**\n\n` +
                 `2. Your 6-digit linking verification code:\n` +
                 `\`\`\`\n${linkData.code}\n\`\`\`\n` +
-                `⏱️ *This code is valid for 15 minutes. Verification happens directly against the payment database.*`);
+                `⏱️ *This code is valid for 15 minutes. Once approved, your Discord roles unlock automatically.*`);
             await interaction.editReply({ embeds: [embed], components: [row] });
         }
         catch (error) {
@@ -44,8 +116,8 @@ exports.subscriptionCommand = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
         let user = null;
-        // 1. Check PostgreSQL if online
-        if ((0, client_js_1.isDatabaseOnline)()) {
+        // 1. Check PostgreSQL only if online
+        if ((0, client_js_1.isPostgresOnline)()) {
             try {
                 user = await client_js_1.prisma.user.findUnique({
                     where: { discordId: interaction.user.id },
@@ -90,13 +162,13 @@ exports.subscriptionCommand = {
         }
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'No Academy account is linked to this Discord profile. Use `/link` to connect.')],
+                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'No active subscription was found for this Discord profile. Submit payment on the portal or use `/link`.')],
             });
             return;
         }
-        const latestSub = user.subscriptions[0];
+        const latestSub = user.subscriptions?.[0];
         const expiresDate = user.subscriptionExpiresAt
-            ? `<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:F> (<t:${Math.floor(user.subscriptionExpiresAt.getTime() / 1000)}:R>)`
+            ? `<t:${Math.floor(new Date(user.subscriptionExpiresAt).getTime() / 1000)}:F> (<t:${Math.floor(new Date(user.subscriptionExpiresAt).getTime() / 1000)}:R>)`
             : '*No expiration set*';
         const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
         const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
@@ -108,7 +180,7 @@ exports.subscriptionCommand = {
             `**Current Tier:** **Tier ${user.currentTier}**\n` +
             `**Plan:** \`${latestSub?.plan || 'Standard'}\`\n` +
             `**Expires/Renews:** ${expiresDate}\n\n` +
-            `*Source of Truth: PostgreSQL Database. Synchronized via Academy Admin Payments.*`);
+            `*Source of Truth: Supabase Cloud Database. Synchronized via Academy Admin Payments.*`);
         await interaction.editReply({ embeds: [embed], components: [row] });
     },
 };
@@ -118,9 +190,20 @@ exports.progressCommand = {
         .setDescription('View your detailed course completion, XP, and streak'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-        const user = await client_js_1.prisma.user.findUnique({
-            where: { discordId: interaction.user.id },
-        });
+        let user = null;
+        if ((0, client_js_1.isPostgresOnline)()) {
+            try {
+                user = await client_js_1.prisma.user.findUnique({
+                    where: { discordId: interaction.user.id },
+                });
+            }
+            catch {
+                // Fallback
+            }
+        }
+        if (!user) {
+            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+        }
         if (!user) {
             await interaction.editReply({
                 embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'Please run `/link` first to connect your Academy account.')],
@@ -145,25 +228,43 @@ exports.continueCommand = {
         .setDescription('Resume exactly where you left off in your lessons'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-        const user = await client_js_1.prisma.user.findUnique({
-            where: { discordId: interaction.user.id },
-            include: { lessonProgress: true },
-        });
+        let user = null;
+        if ((0, client_js_1.isPostgresOnline)()) {
+            try {
+                user = await client_js_1.prisma.user.findUnique({
+                    where: { discordId: interaction.user.id },
+                    include: { lessonProgress: true },
+                });
+            }
+            catch {
+                // Fallback
+            }
+        }
+        if (!user) {
+            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+        }
         if (!user) {
             await interaction.editReply({
                 embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'Please run `/link` first.')],
             });
             return;
         }
-        const completedLessonIds = new Set(user.lessonProgress.filter(p => p.completed).map(p => p.lessonId));
-        // Find first incomplete lesson in user's accessible tiers
-        const nextLesson = await client_js_1.prisma.lesson.findFirst({
-            where: {
-                tier: { lte: user.currentTier },
-                id: { notIn: Array.from(completedLessonIds) },
-            },
-            orderBy: [{ tier: 'asc' }, { module: 'asc' }, { orderIndex: 'asc' }],
-        });
+        const completedLessonIds = new Set((user.lessonProgress || []).filter((p) => p.completed).map((p) => p.lessonId));
+        let nextLesson = null;
+        if ((0, client_js_1.isPostgresOnline)()) {
+            try {
+                nextLesson = await client_js_1.prisma.lesson.findFirst({
+                    where: {
+                        tier: { lte: user.currentTier },
+                        id: { notIn: Array.from(completedLessonIds) },
+                    },
+                    orderBy: [{ tier: 'asc' }, { module: 'asc' }, { orderIndex: 'asc' }],
+                });
+            }
+            catch {
+                // Fallback
+            }
+        }
         if (!nextLesson) {
             await interaction.editReply({
                 embeds: [(0, embed_builder_js_1.createSuccessEmbed)('All Caught Up!', `You have completed all available lessons for your current tier (Tier ${user.currentTier})! Check your final project requirements or wait for the next tier unlock.`)],
