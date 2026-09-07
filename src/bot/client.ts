@@ -16,6 +16,7 @@ import { initPaymentSyncJob } from './jobs/payment-sync.job.js';
 import { deployCommands } from './deploy-commands.js';
 import { logger } from '../utils/logger.js';
 import { createErrorEmbed } from '../utils/embed-builder.js';
+import { isIgnorableInteractionError } from '../utils/interaction.utils.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
@@ -72,15 +73,10 @@ export function createDiscordClient(): Client {
     try {
       await command.execute(interaction);
     } catch (error: any) {
-      // If error is 40060 (Interaction already acknowledged), safely ignore
-      if (
-        error?.code === 40060 ||
-        error?.rawError?.code === 40060 ||
-        error?.message?.includes('already been acknowledged')
-      ) {
+      if (isIgnorableInteractionError(error)) {
         logger.warn(
-          { command: interaction.commandName },
-          'Interaction was already acknowledged (likely duplicate event or dual running bot instances).'
+          { command: interaction.commandName, code: error?.code || error?.rawError?.code },
+          'Interaction expired (>3s) or already handled by another instance (suppressed).'
         );
         return;
       }

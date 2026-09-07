@@ -13,6 +13,7 @@ const payment_sync_job_js_1 = require("./jobs/payment-sync.job.js");
 const deploy_commands_js_1 = require("./deploy-commands.js");
 const logger_js_1 = require("../utils/logger.js");
 const embed_builder_js_1 = require("../utils/embed-builder.js");
+const interaction_utils_js_1 = require("../utils/interaction.utils.js");
 function createDiscordClient() {
     const client = new discord_js_1.Client({
         intents: [
@@ -62,11 +63,8 @@ function createDiscordClient() {
             await command.execute(interaction);
         }
         catch (error) {
-            // If error is 40060 (Interaction already acknowledged), safely ignore
-            if (error?.code === 40060 ||
-                error?.rawError?.code === 40060 ||
-                error?.message?.includes('already been acknowledged')) {
-                logger_js_1.logger.warn({ command: interaction.commandName }, 'Interaction was already acknowledged (likely duplicate event or dual running bot instances).');
+            if ((0, interaction_utils_js_1.isIgnorableInteractionError)(error)) {
+                logger_js_1.logger.warn({ command: interaction.commandName, code: error?.code || error?.rawError?.code }, 'Interaction expired (>3s) or already handled by another instance (suppressed).');
                 return;
             }
             logger_js_1.logger.error({ err: error, command: interaction.commandName }, 'Error executing slash command');
