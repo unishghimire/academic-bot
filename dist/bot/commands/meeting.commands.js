@@ -6,6 +6,7 @@ const meeting_service_js_1 = require("../../services/meeting.service.js");
 const permissions_js_1 = require("../middleware/permissions.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const logger_js_1 = require("../../utils/logger.js");
+const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
 exports.meetingCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('meeting')
@@ -43,7 +44,8 @@ exports.meetingCommand = {
             const isAllowed = await (0, permissions_js_1.requireInstructor)(interaction);
             if (!isAllowed)
                 return;
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             const title = interaction.options.getString('title', true);
             const topic = interaction.options.getString('topic', true);
             const dateStr = interaction.options.getString('datetime', true);
@@ -105,7 +107,8 @@ exports.meetingCommand = {
             }
         }
         else if (sub === 'list') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             try {
                 const meetings = await meeting_service_js_1.meetingService.listUpcomingMeetings();
                 if (!meetings || meetings.length === 0) {
@@ -140,7 +143,8 @@ exports.meetingCommand = {
             const isAllowed = await (0, permissions_js_1.requireInstructor)(interaction);
             if (!isAllowed)
                 return;
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             const meetingId = interaction.options.getString('meeting_id', true);
             const success = await meeting_service_js_1.meetingService.cancelMeeting(meetingId);
             if (success) {
@@ -155,7 +159,8 @@ exports.meetingCommand = {
             }
         }
         else if (sub === 'book') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             const embed = (0, embed_builder_js_1.createInfoEmbed)('🤝 1-on-1 Meeting & Consultation Booking', 'As an active subscriber, you have direct access to our instructors for personalized reviews and strategy sessions.\n\n' +
                 '**How to Book a 1-on-1:**\n' +
                 '1. Check upcoming open slots or reach out to an instructor in the server.\n' +

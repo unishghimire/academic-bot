@@ -1,0 +1,30 @@
+import { ChatInputCommandInteraction } from 'discord.js';
+
+/**
+ * Safely defers a Discord chat input command interaction.
+ * If the interaction has already been acknowledged (e.g., due to duplicate events,
+ * rapid double clicks, or multiple bot instances running simultaneously), it catches
+ * DiscordAPIError 40060 and returns false so the caller can exit gracefully.
+ */
+export async function safeDeferReply(
+  interaction: ChatInputCommandInteraction,
+  ephemeral: boolean = true
+): Promise<boolean> {
+  if (interaction.deferred || interaction.replied) {
+    return true;
+  }
+
+  try {
+    await interaction.deferReply({ ephemeral });
+    return true;
+  } catch (error: any) {
+    if (
+      error?.code === 40060 ||
+      error?.rawError?.code === 40060 ||
+      error?.message?.includes('already been acknowledged')
+    ) {
+      return false;
+    }
+    throw error;
+  }
+}

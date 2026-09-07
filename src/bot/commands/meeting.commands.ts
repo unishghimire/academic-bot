@@ -8,6 +8,7 @@ import { meetingService } from '../../services/meeting.service.js';
 import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { logger } from '../../utils/logger.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
 
 export const meetingCommand = {
   data: new SlashCommandBuilder()
@@ -68,7 +69,7 @@ export const meetingCommand = {
       const isAllowed = await requireInstructor(interaction);
       if (!isAllowed) return;
 
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       const title = interaction.options.getString('title', true);
       const topic = interaction.options.getString('topic', true);
@@ -147,7 +148,7 @@ export const meetingCommand = {
         });
       }
     } else if (sub === 'list') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       try {
         const meetings = await meetingService.listUpcomingMeetings();
@@ -193,7 +194,7 @@ export const meetingCommand = {
       const isAllowed = await requireInstructor(interaction);
       if (!isAllowed) return;
 
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       const meetingId = interaction.options.getString('meeting_id', true);
       const success = await meetingService.cancelMeeting(meetingId);
@@ -208,7 +209,7 @@ export const meetingCommand = {
         });
       }
     } else if (sub === 'book') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       const embed = createInfoEmbed(
         '🤝 1-on-1 Meeting & Consultation Booking',

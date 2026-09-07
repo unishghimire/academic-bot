@@ -11,6 +11,7 @@ import { SubscriptionStatus } from '@prisma/client';
 import { localStore } from '../../db/local-store.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
 
 export const adminDashboardCommand = {
   data: new SlashCommandBuilder()
@@ -21,7 +22,7 @@ export const adminDashboardCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     let totalUsers = 0;
     let activeSubscribers = 0;
@@ -97,7 +98,7 @@ export const grantPremiumCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const target = interaction.options.getUser('student', true);
     const days = interaction.options.getInteger('days', true);
@@ -208,7 +209,7 @@ export const revokePremiumCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const target = interaction.options.getUser('student', true);
     const reason = interaction.options.getString('reason', true);
@@ -313,7 +314,7 @@ export const unlockTierCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const target = interaction.options.getUser('student', true);
     const targetTier = interaction.options.getInteger('tier', true);
@@ -374,7 +375,7 @@ export const addXpCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const target = interaction.options.getUser('student', true);
     const amount = interaction.options.getInteger('amount', true);
@@ -436,7 +437,7 @@ export const broadcastCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const channel = interaction.options.getChannel('channel', true) as TextChannel;
     const message = interaction.options.getString('message', true);
@@ -471,7 +472,7 @@ export const serverStatsCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const guild = interaction.guild;
     if (!guild) {
@@ -512,7 +513,7 @@ export const resetProgressCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     const target = interaction.options.getUser('student', true);
     const reason = interaction.options.getString('reason', true);

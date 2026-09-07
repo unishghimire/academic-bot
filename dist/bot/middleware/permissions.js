@@ -24,10 +24,12 @@ function isPremium(member) {
 async function requireAdmin(interaction) {
     const member = interaction.member;
     if (!member || !isAdmin(member)) {
-        await interaction.reply({
-            embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Administrator** role.')],
-            ephemeral: true,
-        });
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({
+                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Administrator** role.')],
+                ephemeral: true,
+            }).catch(() => { });
+        }
         return false;
     }
     return true;
@@ -35,10 +37,12 @@ async function requireAdmin(interaction) {
 async function requireInstructor(interaction) {
     const member = interaction.member;
     if (!member || !isInstructor(member)) {
-        await interaction.reply({
-            embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Instructor** role.')],
-            ephemeral: true,
-        });
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({
+                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Instructor** role.')],
+                ephemeral: true,
+            }).catch(() => { });
+        }
         return false;
     }
     return true;
@@ -46,10 +50,12 @@ async function requireInstructor(interaction) {
 async function requirePremium(interaction) {
     const member = interaction.member;
     if (!member || !isPremium(member)) {
-        await interaction.reply({
-            embeds: [(0, embed_builder_js_1.createErrorEmbed)('Premium Required', 'This feature is reserved for active **Premium Academy** subscribers.\nUse `/link` to connect your subscription.')],
-            ephemeral: true,
-        });
+        if (!interaction.deferred && !interaction.replied) {
+            await interaction.reply({
+                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Premium Required', 'This feature is reserved for active **Premium Academy** subscribers.\nUse `/link` to connect your subscription.')],
+                ephemeral: true,
+            }).catch(() => { });
+        }
         return false;
     }
     return true;

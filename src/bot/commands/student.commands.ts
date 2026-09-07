@@ -13,6 +13,7 @@ import { getSupabaseClient } from '../../db/supabase.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed } from '../../utils/embed-builder.js';
 import { env } from '../../config/env.js';
 import { COLORS } from '../../config/constants.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
 
 export const linkCommand = {
   data: new SlashCommandBuilder()
@@ -20,7 +21,7 @@ export const linkCommand = {
     .setDescription('Connect your Discord account to your verified Academy subscription'),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     try {
       const supabase = getSupabaseClient();
@@ -149,7 +150,7 @@ export const subscriptionCommand = {
     .setDescription('View your current Academy membership, plan, and renewal date'),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     let user: any = null;
 
@@ -239,7 +240,7 @@ export const progressCommand = {
     .setDescription('View your detailed course completion, XP, and streak'),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     let user: any = null;
     if (isPostgresOnline()) {
@@ -286,7 +287,7 @@ export const continueCommand = {
     .setDescription('Resume exactly where you left off in your lessons'),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     let user: any = null;
     if (isPostgresOnline()) {

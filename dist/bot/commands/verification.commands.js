@@ -10,6 +10,7 @@ const permissions_js_1 = require("../middleware/permissions.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const env_js_1 = require("../../config/env.js");
 const logger_js_1 = require("../../utils/logger.js");
+const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
 exports.verifyProofCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('verify-proof')
@@ -45,7 +46,8 @@ exports.verifyProofCommand = {
             return;
         const sub = interaction.options.getSubcommand();
         if (sub === 'sync') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             try {
                 const syncRes = await payment_verification_sync_service_js_1.paymentVerificationSyncService.syncApprovedPayments(interaction.client, true);
                 await interaction.editReply({
@@ -65,7 +67,8 @@ exports.verifyProofCommand = {
             return;
         }
         if (sub === 'list') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             try {
                 const payments = await manual_payment_service_js_1.manualPaymentService.listPayments({
                     status: client_1.ManualPaymentStatus.PENDING,
@@ -102,7 +105,8 @@ exports.verifyProofCommand = {
             }
         }
         else if (sub === 'approve') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             const paymentId = interaction.options.getString('payment_id', true);
             const tier = interaction.options.getInteger('tier') || 1;
             const durationDays = interaction.options.getInteger('days') || 30;
@@ -136,7 +140,8 @@ exports.verifyProofCommand = {
             }
         }
         else if (sub === 'reject') {
-            await interaction.deferReply({ ephemeral: true });
+            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+                return;
             const paymentId = interaction.options.getString('payment_id', true);
             const reason = interaction.options.getString('reason', true);
             try {
@@ -166,7 +171,8 @@ exports.paymentMethodsCommand = {
         .setName('payment-methods')
         .setDescription('View official payment methods and instructions to subscribe'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            return;
         try {
             const methods = await payment_method_service_js_1.paymentMethodService.listActiveMethods();
             if (!methods || methods.length === 0) {

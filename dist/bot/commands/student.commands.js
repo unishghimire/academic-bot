@@ -9,12 +9,14 @@ const local_store_js_1 = require("../../db/local-store.js");
 const supabase_js_1 = require("../../db/supabase.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
 const env_js_1 = require("../../config/env.js");
+const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
 exports.linkCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('link')
         .setDescription('Connect your Discord account to your verified Academy subscription'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            return;
         try {
             const supabase = (0, supabase_js_1.getSupabaseClient)();
             const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
@@ -114,7 +116,8 @@ exports.subscriptionCommand = {
         .setName('subscription')
         .setDescription('View your current Academy membership, plan, and renewal date'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            return;
         let user = null;
         // 1. Check PostgreSQL only if online
         if ((0, client_js_1.isPostgresOnline)()) {
@@ -189,7 +192,8 @@ exports.progressCommand = {
         .setName('progress')
         .setDescription('View your detailed course completion, XP, and streak'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            return;
         let user = null;
         if ((0, client_js_1.isPostgresOnline)()) {
             try {
@@ -227,7 +231,8 @@ exports.continueCommand = {
         .setName('continue')
         .setDescription('Resume exactly where you left off in your lessons'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            return;
         let user = null;
         if ((0, client_js_1.isPostgresOnline)()) {
             try {

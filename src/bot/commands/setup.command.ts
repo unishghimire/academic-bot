@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 import { requireAdmin } from '../middleware/permissions.js';
 import { serverSetupService } from '../../services/server-setup.service.js';
 import { createSuccessEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
 
 export const setupServerCommand = {
   data: new SlashCommandBuilder()
@@ -12,7 +13,7 @@ export const setupServerCommand = {
     const isAllowed = await requireAdmin(interaction);
     if (!isAllowed) return;
 
-    await interaction.deferReply();
+    if (!(await safeDeferReply(interaction, false))) return;
 
     const guild = interaction.guild;
     if (!guild) {

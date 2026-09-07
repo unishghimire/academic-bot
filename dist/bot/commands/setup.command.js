@@ -5,6 +5,7 @@ const discord_js_1 = require("discord.js");
 const permissions_js_1 = require("../middleware/permissions.js");
 const server_setup_service_js_1 = require("../../services/server-setup.service.js");
 const embed_builder_js_1 = require("../../utils/embed-builder.js");
+const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
 exports.setupServerCommand = {
     data: new discord_js_1.SlashCommandBuilder()
         .setName('setup-server')
@@ -13,7 +14,8 @@ exports.setupServerCommand = {
         const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
         if (!isAllowed)
             return;
-        await interaction.deferReply();
+        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, false)))
+            return;
         const guild = interaction.guild;
         if (!guild) {
             await interaction.editReply('This command must be executed inside your Discord server.');

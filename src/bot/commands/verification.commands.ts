@@ -13,6 +13,7 @@ import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
 
 export const verifyProofCommand = {
   data: new SlashCommandBuilder()
@@ -75,7 +76,7 @@ export const verifyProofCommand = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === 'sync') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
       try {
         const syncRes = await paymentVerificationSyncService.syncApprovedPayments(interaction.client, true);
         await interaction.editReply({
@@ -98,7 +99,7 @@ export const verifyProofCommand = {
     }
 
     if (sub === 'list') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       try {
         const payments = await manualPaymentService.listPayments({
@@ -146,7 +147,7 @@ export const verifyProofCommand = {
         });
       }
     } else if (sub === 'approve') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       const paymentId = interaction.options.getString('payment_id', true);
       const tier = interaction.options.getInteger('tier') || 1;
@@ -189,7 +190,7 @@ export const verifyProofCommand = {
         });
       }
     } else if (sub === 'reject') {
-      await interaction.deferReply({ ephemeral: true });
+      if (!(await safeDeferReply(interaction, true))) return;
 
       const paymentId = interaction.options.getString('payment_id', true);
       const reason = interaction.options.getString('reason', true);
@@ -229,7 +230,7 @@ export const paymentMethodsCommand = {
     .setDescription('View official payment methods and instructions to subscribe'),
 
   async execute(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await safeDeferReply(interaction, true))) return;
 
     try {
       const methods = await paymentMethodService.listActiveMethods();

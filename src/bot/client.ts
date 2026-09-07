@@ -72,6 +72,19 @@ export function createDiscordClient(): Client {
     try {
       await command.execute(interaction);
     } catch (error: any) {
+      // If error is 40060 (Interaction already acknowledged), safely ignore
+      if (
+        error?.code === 40060 ||
+        error?.rawError?.code === 40060 ||
+        error?.message?.includes('already been acknowledged')
+      ) {
+        logger.warn(
+          { command: interaction.commandName },
+          'Interaction was already acknowledged (likely duplicate event or dual running bot instances).'
+        );
+        return;
+      }
+
       logger.error({ err: error, command: interaction.commandName }, 'Error executing slash command');
 
       await errorLogger.report(client, {
