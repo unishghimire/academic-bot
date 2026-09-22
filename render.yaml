@@ -31,14 +31,8 @@ services:
         generateValue: true
       - key: ACADEMY_API_SECRET
         generateValue: true
-      - key: ROLE_PREMIUM
-        value: "1545689925066694698"
-      - key: ROLE_TIER_1
-        value: "1545689923007291484"
-      - key: ROLE_TIER_2
-        value: "1545689921308721177"
-      - key: ROLE_TIER_3
-        value: "1545689919480004732"
+      - key: ROLE_ELITE
+        value: "role_elite"
       - key: ROLE_ADMIN
         value: "1545689913628950558"
       - key: ROLE_INSTRUCTOR

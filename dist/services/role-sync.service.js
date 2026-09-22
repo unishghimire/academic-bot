@@ -3,7 +3,6 @@ import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
 import { env } from '../config/env.js';
 import { auditService } from './audit.service.js';
 import { logger } from '../utils/logger.js';
-import { TIER_LEVELS } from '../config/constants.js';
 import { localStore } from '../db/local-store.js';
 import { getSupabaseClient } from '../db/supabase.js';
 export class RoleSyncService {
@@ -19,44 +18,36 @@ export class RoleSyncService {
         const expectedRoleIds = new Set();
         const prohibitedRoleIds = new Set();
         const allManagedRoles = [
+            env.ROLE_ELITE,
             env.ROLE_PREMIUM,
             env.ROLE_TIER_1,
             env.ROLE_TIER_2,
             env.ROLE_TIER_3,
             env.ROLE_GRADUATE,
-        ].filter(Boolean);
+        ].filter((r) => Boolean(r));
         // Verify user is marked ACTIVE AND expiration timestamp has not elapsed
         const isExpired = user.subscriptionExpiresAt
             ? new Date(user.subscriptionExpiresAt).getTime() <= Date.now()
             : false;
         const isActuallyActive = user.subscriptionStatus === SubscriptionStatus.ACTIVE && !isExpired;
         if (isActuallyActive) {
-            expectedRoleIds.add(env.ROLE_PREMIUM);
-            if (user.currentTier >= TIER_LEVELS.TIER_1) {
-                expectedRoleIds.add(env.ROLE_TIER_1);
-            }
-            if (user.currentTier >= TIER_LEVELS.TIER_2) {
-                expectedRoleIds.add(env.ROLE_TIER_2);
-            }
-            if (user.currentTier >= TIER_LEVELS.TIER_3) {
-                expectedRoleIds.add(env.ROLE_TIER_3);
-            }
-            if (user.currentTier >= TIER_LEVELS.GRADUATE) {
-                expectedRoleIds.add(env.ROLE_GRADUATE);
-            }
-            // Prohibit tiers higher than granted currentTier
-            if (user.currentTier < TIER_LEVELS.TIER_2) {
+            // In the single-role model, all active subscribers receive the Elite role
+            if (env.ROLE_ELITE)
+                expectedRoleIds.add(env.ROLE_ELITE);
+            if (env.ROLE_PREMIUM)
+                expectedRoleIds.add(env.ROLE_PREMIUM);
+            // Clean up any deprecated tier roles if present
+            if (env.ROLE_TIER_1)
+                prohibitedRoleIds.add(env.ROLE_TIER_1);
+            if (env.ROLE_TIER_2)
                 prohibitedRoleIds.add(env.ROLE_TIER_2);
-            }
-            if (user.currentTier < TIER_LEVELS.TIER_3) {
+            if (env.ROLE_TIER_3)
                 prohibitedRoleIds.add(env.ROLE_TIER_3);
-            }
-            if (user.currentTier < TIER_LEVELS.GRADUATE) {
+            if (env.ROLE_GRADUATE)
                 prohibitedRoleIds.add(env.ROLE_GRADUATE);
-            }
         }
         else {
-            // Inactive, expired, or cancelled: revoke all academy progression & premium roles directly
+            // Inactive, expired, or cancelled: revoke Elite and all managed roles directly
             for (const roleId of allManagedRoles) {
                 prohibitedRoleIds.add(roleId);
             }
@@ -133,8 +124,13 @@ export class RoleSyncService {
         const resolveRoleInGuild = (id) => {
             if (guild.roles.cache.has(id))
                 return id;
+            if (id === env.ROLE_ELITE || id === 'role_elite') {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'elite');
+                if (r)
+                    return r.id;
+            }
             if (id === env.ROLE_PREMIUM) {
-                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'premium');
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'elite' || x.name.toLowerCase() === 'premium');
                 if (r)
                     return r.id;
             }

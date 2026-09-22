@@ -35,12 +35,13 @@ export class RoleSyncService {
     const prohibitedRoleIds = new Set<string>();
 
     const allManagedRoles = [
+      env.ROLE_ELITE,
       env.ROLE_PREMIUM,
       env.ROLE_TIER_1,
       env.ROLE_TIER_2,
       env.ROLE_TIER_3,
       env.ROLE_GRADUATE,
-    ].filter(Boolean);
+    ].filter((r): r is string => Boolean(r));
 
     // Verify user is marked ACTIVE AND expiration timestamp has not elapsed
     const isExpired = user.subscriptionExpiresAt
@@ -51,33 +52,17 @@ export class RoleSyncService {
       user.subscriptionStatus === SubscriptionStatus.ACTIVE && !isExpired;
 
     if (isActuallyActive) {
-      expectedRoleIds.add(env.ROLE_PREMIUM);
+      // In the single-role model, all active subscribers receive the Elite role
+      if (env.ROLE_ELITE) expectedRoleIds.add(env.ROLE_ELITE);
+      if (env.ROLE_PREMIUM) expectedRoleIds.add(env.ROLE_PREMIUM);
 
-      if (user.currentTier >= TIER_LEVELS.TIER_1) {
-        expectedRoleIds.add(env.ROLE_TIER_1);
-      }
-      if (user.currentTier >= TIER_LEVELS.TIER_2) {
-        expectedRoleIds.add(env.ROLE_TIER_2);
-      }
-      if (user.currentTier >= TIER_LEVELS.TIER_3) {
-        expectedRoleIds.add(env.ROLE_TIER_3);
-      }
-      if (user.currentTier >= TIER_LEVELS.GRADUATE) {
-        expectedRoleIds.add(env.ROLE_GRADUATE);
-      }
-
-      // Prohibit tiers higher than granted currentTier
-      if (user.currentTier < TIER_LEVELS.TIER_2) {
-        prohibitedRoleIds.add(env.ROLE_TIER_2);
-      }
-      if (user.currentTier < TIER_LEVELS.TIER_3) {
-        prohibitedRoleIds.add(env.ROLE_TIER_3);
-      }
-      if (user.currentTier < TIER_LEVELS.GRADUATE) {
-        prohibitedRoleIds.add(env.ROLE_GRADUATE);
-      }
+      // Clean up any deprecated tier roles if present
+      if (env.ROLE_TIER_1) prohibitedRoleIds.add(env.ROLE_TIER_1);
+      if (env.ROLE_TIER_2) prohibitedRoleIds.add(env.ROLE_TIER_2);
+      if (env.ROLE_TIER_3) prohibitedRoleIds.add(env.ROLE_TIER_3);
+      if (env.ROLE_GRADUATE) prohibitedRoleIds.add(env.ROLE_GRADUATE);
     } else {
-      // Inactive, expired, or cancelled: revoke all academy progression & premium roles directly
+      // Inactive, expired, or cancelled: revoke Elite and all managed roles directly
       for (const roleId of allManagedRoles) {
         prohibitedRoleIds.add(roleId);
       }
@@ -158,8 +143,12 @@ export class RoleSyncService {
     // Resolve configured role IDs against current guild cache, falling back to name
     const resolveRoleInGuild = (id: string): string | null => {
       if (guild.roles.cache.has(id)) return id;
+      if (id === env.ROLE_ELITE || id === 'role_elite') {
+        const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'elite');
+        if (r) return r.id;
+      }
       if (id === env.ROLE_PREMIUM) {
-        const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'premium');
+        const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'elite' || x.name.toLowerCase() === 'premium');
         if (r) return r.id;
       }
       if (id === env.ROLE_TIER_1) {

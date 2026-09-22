@@ -7,8 +7,11 @@ export interface ScheduleMeetingInput {
   title: string;
   topic: string;
   scheduledAt: Date;
-  channelUrl: string;
+  channelUrl?: string;
   reminderRole?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  targetChannelId?: string | null;
 }
 
 export class MeetingService {
@@ -19,55 +22,55 @@ export class MeetingService {
   }
 
   /**
-   * Schedule a new meeting/class
+   * Schedule a new meeting/class with optional category for automated voice channel creation
    */
   async scheduleMeeting(input: ScheduleMeetingInput): Promise<LiveClass> {
-    if (!input.title || !input.topic || !input.scheduledAt || !input.channelUrl) {
+    if (!input.title || !input.topic || !input.scheduledAt) {
       throw new Error('Title, topic, date/time, and meeting URL are required.');
     }
 
+    const meetingUrl = input.channelUrl?.trim() || 'Auto Voice Channel';
+
+    const meetingData: any = {
+      id: `meet_${Date.now()}`,
+      title: input.title.trim(),
+      topic: input.topic.trim(),
+      scheduledAt: input.scheduledAt,
+      channelUrl: meetingUrl,
+      reminderRole: input.reminderRole ? input.reminderRole.trim() : null,
+      categoryId: input.categoryId || null,
+      categoryName: input.categoryName || null,
+      targetChannelId: input.targetChannelId || null,
+      isLive: false,
+      announced: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
     if (this.isOffline()) {
-      const meeting: LiveClass = {
-        id: `meet_${Date.now()}`,
-        title: input.title.trim(),
-        topic: input.topic.trim(),
-        scheduledAt: input.scheduledAt,
-        channelUrl: input.channelUrl.trim(),
-        reminderRole: input.reminderRole ? input.reminderRole.trim() : null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      localStore.saveLiveClass(meeting);
-      logger.info({ meetingId: meeting.id }, 'Meeting scheduled in local offline storage');
-      return meeting;
+      localStore.saveLiveClass(meetingData);
+      logger.info({ meetingId: meetingData.id }, 'Meeting scheduled in local storage');
+      return meetingData;
     }
 
     try {
       const meeting = await this.db.liveClass.create({
         data: {
-          title: input.title.trim(),
-          topic: input.topic.trim(),
-          scheduledAt: input.scheduledAt,
-          channelUrl: input.channelUrl.trim(),
-          reminderRole: input.reminderRole ? input.reminderRole.trim() : null,
+          title: meetingData.title,
+          topic: meetingData.topic,
+          scheduledAt: meetingData.scheduledAt,
+          channelUrl: meetingData.channelUrl,
+          reminderRole: meetingData.reminderRole,
         },
       });
-      logger.info({ meetingId: meeting.id }, 'Meeting scheduled successfully in database');
-      return meeting;
+      // Save supplementary categoryId to local store
+      localStore.saveLiveClass({ ...meetingData, id: meeting.id });
+      logger.info({ meetingId: meeting.id }, 'Meeting scheduled in database');
+      return { ...meetingData, ...meeting };
     } catch (err) {
       logger.warn({ err }, 'Database save failed, using local offline storage for meeting');
-      const meeting: LiveClass = {
-        id: `meet_${Date.now()}`,
-        title: input.title.trim(),
-        topic: input.topic.trim(),
-        scheduledAt: input.scheduledAt,
-        channelUrl: input.channelUrl.trim(),
-        reminderRole: input.reminderRole ? input.reminderRole.trim() : null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      localStore.saveLiveClass(meeting);
-      return meeting;
+      localStore.saveLiveClass(meetingData);
+      return meetingData;
     }
   }
 
@@ -78,25 +81,56 @@ export class MeetingService {
     const now = new Date();
 
     if (this.isOffline()) {
-      const all: LiveClass[] = localStore.getLiveClasses();
+      const all: any[] = localStore.getLiveClasses();
       return all
-        .filter(m => new Date(m.scheduledAt).getTime() >= now.getTime() - 15 * 60 * 1000) // within 15 min past or in future
+        .filter(m => new Date(m.scheduledAt).getTime() >= now.getTime() - 15 * 60 * 1000)
         .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
     }
 
     try {
-      return await this.db.liveClass.findMany({
+      const dbMeetings = await this.db.liveClass.findMany({
         where: {
           scheduledAt: { gte: new Date(now.getTime() - 15 * 60 * 1000) },
         },
         orderBy: { scheduledAt: 'asc' },
       });
+      return dbMeetings;
     } catch {
-      const all: LiveClass[] = localStore.getLiveClasses();
+      const all: any[] = localStore.getLiveClasses();
       return all
         .filter(m => new Date(m.scheduledAt).getTime() >= now.getTime() - 15 * 60 * 1000)
         .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
     }
+  }
+
+  /**
+   * Retrieve meetings that have reached scheduled time and are not yet marked LIVE
+   */
+  async getDueUnannouncedMeetings(now: Date = new Date()): Promise<any[]> {
+    const localAll: any[] = localStore.getLiveClasses();
+    return localAll.filter(m => {
+      const scheduledTime = new Date(m.scheduledAt).getTime();
+      return scheduledTime <= now.getTime() && !m.isLive;
+    });
+  }
+
+  /**
+   * Mark meeting as live, recording the created voice channel ID and direct link
+   */
+  async markMeetingLive(id: string, voiceChannelId?: string, channelUrl?: string): Promise<any | null> {
+    const existing = localStore.findLiveClassById(id);
+    if (!existing) return null;
+
+    const updated = {
+      ...existing,
+      isLive: true,
+      announced: true,
+      voiceChannelId: voiceChannelId || existing.voiceChannelId,
+      channelUrl: channelUrl || existing.channelUrl,
+      updatedAt: new Date(),
+    };
+    localStore.saveLiveClass(updated);
+    return updated;
   }
 
   /**
@@ -109,6 +143,7 @@ export class MeetingService {
 
     try {
       await this.db.liveClass.delete({ where: { id } });
+      localStore.deleteLiveClass(id);
       return true;
     } catch {
       return localStore.deleteLiveClass(id);

@@ -16,11 +16,12 @@ const envSchema = z.object({
   DISCORD_GUILD_ID: z.string().default('1443245164200988724'),
 
   // Roles for Server 1443245164200988724
-  ROLE_PREMIUM: z.string().default('1545689925066694698'),
-  ROLE_TIER_1: z.string().default('1545689923007291484'),
-  ROLE_TIER_2: z.string().default('1545689921308721177'),
-  ROLE_TIER_3: z.string().default('1545689919480004732'),
-  ROLE_GRADUATE: z.string().default('1545689916967485442'),
+  ROLE_ELITE: z.string().default(process.env.ROLE_ELITE || process.env.ROLE_PREMIUM || 'role_elite'),
+  ROLE_PREMIUM: z.string().default('role_elite'),
+  ROLE_TIER_1: z.string().default('role_tier_1_legacy'),
+  ROLE_TIER_2: z.string().default('role_tier_2_legacy'),
+  ROLE_TIER_3: z.string().default('role_tier_3_legacy'),
+  ROLE_GRADUATE: z.string().default('role_graduate_legacy'),
   ROLE_INSTRUCTOR: z.string().default('1545689915440766976'),
   ROLE_ADMIN: z.string().default('1545689913628950558'),
 

@@ -21,26 +21,23 @@ describe('Subscription Expiry, 3-Minute Sweep & Payment Verification', () => {
         subscriptionExpiresAt: futureDate,
       });
 
+      expect(expectedRoleIds.has(env.ROLE_ELITE)).toBe(true);
       expect(expectedRoleIds.has(env.ROLE_PREMIUM)).toBe(true);
-      expect(expectedRoleIds.has(env.ROLE_TIER_1)).toBe(true);
-      expect(prohibitedRoleIds.has(env.ROLE_PREMIUM)).toBe(false);
+      expect(prohibitedRoleIds.has(env.ROLE_ELITE)).toBe(false);
     });
 
     it('prohibits roles when subscriptionExpiresAt has passed, even if subscriptionStatus was ACTIVE', () => {
       const pastDate = new Date(Date.now() - 1000 * 60); // 1 minute ago
       const { expectedRoleIds, prohibitedRoleIds } = roleSyncService.computeExpectedRoles({
         subscriptionStatus: SubscriptionStatus.ACTIVE,
-        currentTier: 2,
+        currentTier: 1,
         subscriptionExpiresAt: pastDate,
       });
 
       // No roles allowed; all managed roles must be stripped
       expect(expectedRoleIds.size).toBe(0);
+      expect(prohibitedRoleIds.has(env.ROLE_ELITE)).toBe(true);
       expect(prohibitedRoleIds.has(env.ROLE_PREMIUM)).toBe(true);
-      expect(prohibitedRoleIds.has(env.ROLE_TIER_1)).toBe(true);
-      expect(prohibitedRoleIds.has(env.ROLE_TIER_2)).toBe(true);
-      expect(prohibitedRoleIds.has(env.ROLE_TIER_3)).toBe(true);
-      expect(prohibitedRoleIds.has(env.ROLE_GRADUATE)).toBe(true);
     });
   });
 

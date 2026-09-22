@@ -10,6 +10,7 @@ import { localStore } from '../../db/local-store.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
+import { resolveGuildRole } from '../../utils/role.utils.js';
 export const adminDashboardCommand = {
     data: new SlashCommandBuilder()
         .setName('admin-dashboard')
@@ -157,14 +158,14 @@ export const grantPremiumCommand = {
                 logger.warn({ err }, 'Could not upsert into Supabase for admin grant');
             }
         }
-        // Grant Discord roles directly
+        // Grant Elite role directly
         if (interaction.guild) {
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (member) {
-                if (env.ROLE_PREMIUM)
-                    await member.roles.add(env.ROLE_PREMIUM).catch(() => { });
-                if (env.ROLE_TIER_1)
-                    await member.roles.add(env.ROLE_TIER_1).catch(() => { });
+                const eliteRole = resolveGuildRole(interaction.guild, env.ROLE_ELITE, 'Elite') ||
+                    resolveGuildRole(interaction.guild, env.ROLE_PREMIUM, 'Premium');
+                if (eliteRole)
+                    await member.roles.add(eliteRole.id).catch(() => { });
             }
         }
         await auditService.log({
@@ -237,12 +238,16 @@ export const revokePremiumCommand = {
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (member) {
                 const rolesToRemove = [
+                    env.ROLE_ELITE,
                     env.ROLE_PREMIUM,
                     env.ROLE_TIER_1,
                     env.ROLE_TIER_2,
                     env.ROLE_TIER_3,
                     env.ROLE_GRADUATE,
-                ].filter(Boolean);
+                ].filter((r) => Boolean(r));
+                const eliteRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'elite');
+                if (eliteRole)
+                    rolesToRemove.push(eliteRole.id);
                 for (const r of rolesToRemove) {
                     if (member.roles.cache.has(r)) {
                         await member.roles.remove(r).catch(() => { });

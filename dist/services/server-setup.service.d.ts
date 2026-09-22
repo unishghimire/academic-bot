@@ -7,8 +7,9 @@ export interface SetupResult {
 }
 export declare class ServerSetupService {
     /**
-     * Automatically provisions all Academy roles, categories, and channels with proper permissions.
-     * Updates the .env file with the created IDs.
+     * Automated server setup streamlined to the core Academy requirements:
+     * Roles: Admin, Instructor, Elite
+     * Channels: welcome, error-log, audit-log
      */
     setupGuild(guild: Guild): Promise<SetupResult>;
     /**

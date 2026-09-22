@@ -37,12 +37,16 @@ export async function runExpirySweep(client: Client): Promise<void> {
           const member = await guild.members.fetch(u.discordId).catch(() => null);
           if (member) {
             const managedRoles = [
+              env.ROLE_ELITE,
               env.ROLE_PREMIUM,
               env.ROLE_TIER_1,
               env.ROLE_TIER_2,
               env.ROLE_TIER_3,
               env.ROLE_GRADUATE,
-            ].filter(Boolean);
+            ].filter((r): r is string => Boolean(r));
+
+            const eliteRole = guild.roles?.cache ? guild.roles.cache.find(r => r.name.toLowerCase() === 'elite') : undefined;
+            if (eliteRole) managedRoles.push(eliteRole.id);
 
             const rolesToRemove = managedRoles.filter(r => member.roles.cache.has(r));
             if (rolesToRemove.length > 0) {
@@ -70,8 +74,8 @@ export async function runExpirySweep(client: Client): Promise<void> {
                 .setColor(COLORS.DANGER)
                 .setDescription(
                   `Hello <@${u.discordId}>,\n\n` +
-                  `Your course subscription has **expired** and your subscriber roles have been removed from the server.\n\n` +
-                  `• **Previous Access:** Tier ${u.tier}\n` +
+                  `Your **Elite** course subscription has **expired** and your access roles have been removed from the server.\n\n` +
+                  `• **Previous Access:** Elite Member\n` +
                   `• **Expired On:** <t:${Math.floor(new Date(u.expiresAt).getTime() / 1000)}:F>\n\n` +
                   `⭐ **Your Progress is Safe:** All your completed lessons, quiz scores, XP, and achievements remain **permanently preserved**.\n\n` +
                   `👉 Click the button below to visit the payment portal and reactivate your membership to restore your roles and access!`

@@ -5,6 +5,7 @@ export declare const env: {
     DISCORD_TOKEN: string;
     DISCORD_CLIENT_ID: string;
     DISCORD_GUILD_ID: string;
+    ROLE_ELITE: string;
     ROLE_PREMIUM: string;
     ROLE_TIER_1: string;
     ROLE_TIER_2: string;

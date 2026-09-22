@@ -1,6 +1,6 @@
 /**
  * PHASE 1 ACTIVE COMMANDS:
- * Payment verification, role granting, subscription tracking, and meeting scheduling.
+ * Payment verification, role granting, subscription tracking, meeting scheduling, and announcements.
  * All other features are safely hidden until user requests expansion.
  */
 export declare const allCommands: ({

@@ -26,7 +26,7 @@ export const setupServerCommand = {
                 `• **Channels Checked/Created (${Object.keys(result.channels).length}):**\n` +
                 `  ${Object.keys(result.channels).map(k => `\`${k}\` (<#${result.channels[k]}>)`).join('\n  ')}\n\n` +
                 `✅ All Role IDs and Channel IDs have been written automatically to your \`.env\` file!\n\n` +
-                `⚠️ **Important Next Step:** In **Server Settings ➔ Roles**, make sure to drag the bot's role (**THE ELITE CIRCLE**) above the \`@Premium\` and \`@Tier-1\` roles so it can assign them.`);
+                `⚠️ **Important Next Step:** In **Server Settings ➔ Roles**, make sure to drag the bot's role (**THE ELITE CIRCLE**) above the \`@Elite\` role so it can assign and manage it.`);
             await interaction.editReply({ embeds: [embed] });
         }
         catch (error) {

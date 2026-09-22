@@ -2,13 +2,15 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   TextChannel,
-  PermissionFlagsBits,
+  ChannelType,
+  CategoryChannel,
 } from 'discord.js';
 import { meetingService } from '../../services/meeting.service.js';
 import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { logger } from '../../utils/logger.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
+import { env } from '../../config/env.js';
 
 export const meetingCommand = {
   data: new SlashCommandBuilder()
@@ -30,16 +32,23 @@ export const meetingCommand = {
             .setDescription('Date & Time (e.g. 2026-09-15 18:00 UTC or YYYY-MM-DD HH:mm)')
             .setRequired(true)
         )
+        .addChannelOption(opt =>
+          opt
+            .setName('category')
+            .setDescription('Category where voice channel will be auto-created')
+            .addChannelTypes(ChannelType.GuildCategory)
+            .setRequired(false)
+        )
         .addStringOption(opt =>
           opt
             .setName('meeting_url')
-            .setDescription('Meeting link (Google Meet, Zoom, or Discord Voice/Stage)')
-            .setRequired(true)
+            .setDescription('Custom link if using external Zoom/Meet (optional)')
+            .setRequired(false)
         )
         .addRoleOption(opt =>
           opt
             .setName('role')
-            .setDescription('Role to ping for this meeting (e.g. @Tier-1, @Tier-2, @Premium)')
+            .setDescription('Role to ping for this meeting (defaults to @Elite)')
             .setRequired(false)
         )
     )
@@ -74,8 +83,16 @@ export const meetingCommand = {
       const title = interaction.options.getString('title', true);
       const topic = interaction.options.getString('topic', true);
       const dateStr = interaction.options.getString('datetime', true);
-      const meetingUrl = interaction.options.getString('meeting_url', true);
-      const reminderRole = interaction.options.getRole('role');
+      const category = interaction.options.getChannel('category') as CategoryChannel | null;
+      const meetingUrl = interaction.options.getString('meeting_url') || '🔊 Auto-Created Voice Channel';
+      let reminderRole = interaction.options.getRole('role');
+
+      // Default ping role to Elite role if not specified
+      if (!reminderRole && interaction.guild) {
+        reminderRole = interaction.guild.roles.cache.find(
+          r => r.name.toLowerCase() === 'elite' || r.id === env.ROLE_ELITE
+        ) || null;
+      }
 
       // Parse date
       const scheduledDate = new Date(dateStr);
@@ -98,33 +115,37 @@ export const meetingCommand = {
           scheduledAt: scheduledDate,
           channelUrl: meetingUrl,
           reminderRole: reminderRole ? reminderRole.id : null,
+          categoryId: category ? category.id : null,
+          categoryName: category ? category.name : null,
+          targetChannelId: interaction.channelId,
         });
 
         const unixTimestamp = Math.floor(scheduledDate.getTime() / 1000);
         const roleMention = reminderRole ? `<@&${reminderRole.id}>` : null;
 
-        // Try to announce in #live-classes or #announcements or current channel
+        // Try to announce in #welcome or #announcements or current channel
         const guild = interaction.guild;
         if (guild) {
           const channels = await guild.channels.fetch();
-          const targetChannel = channels.find(
-            c => c && (c.name === 'live-classes' || c.name === 'announcements') && c.isTextBased()
-          ) as TextChannel | undefined;
+          const targetChannel = (channels.find(
+            c => c && (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()
+          ) || interaction.channel) as TextChannel | undefined;
 
           const announcementEmbed = createInfoEmbed(
             `📅 New Meeting Scheduled: ${title}`,
             `**Topic:** ${topic}\n\n` +
             `🕒 **When:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
-            `🔗 **Join Link:** [Click Here to Join Meeting](${meetingUrl})\n` +
+            `🔊 **Voice Channel:** ${category ? `Will auto-open in category **${category.name}**` : 'Will auto-open in server when live'}\n` +
+            (meetingUrl !== '🔊 Auto-Created Voice Channel' ? `🔗 **Direct Link:** [Join Meeting](${meetingUrl})\n` : '') +
             (roleMention ? `👥 **Audience:** ${roleMention}\n` : '') +
             `\n*Meeting ID:* \`${meeting.id}\``
           );
 
-          if (targetChannel) {
+          if (targetChannel && targetChannel.isTextBased()) {
             await targetChannel.send({
-              content: roleMention ? `📢 ${roleMention} — New meeting scheduled!` : undefined,
+              content: roleMention ? `📢 ${roleMention} — New class/meeting scheduled!` : undefined,
               embeds: [announcementEmbed],
-            }).catch(err => logger.warn({ err }, 'Could not post to live-classes channel'));
+            }).catch(err => logger.warn({ err }, 'Could not post meeting announcement'));
           }
         }
 
@@ -135,9 +156,9 @@ export const meetingCommand = {
               `Successfully scheduled **${title}**!\n\n` +
               `• **ID:** \`${meeting.id}\`\n` +
               `• **Date & Time:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
-              `• **Link:** ${meetingUrl}\n` +
+              (category ? `• **Auto Voice Category:** ${category.name}\n` : '') +
               (reminderRole ? `• **Notified Role:** <@&${reminderRole.id}>\n` : '') +
-              `\nStudents can also view this anytime using \`/meeting list\`.`
+              `\n⚡ *When the scheduled time arrives, the bot will automatically create the voice channel and broadcast the live link!*`
             ),
           ],
         });

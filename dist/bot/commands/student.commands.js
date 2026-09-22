@@ -7,6 +7,7 @@ import { getSupabaseClient } from '../../db/supabase.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed } from '../../utils/embed-builder.js';
 import { env } from '../../config/env.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
+import { resolveGuildRole } from '../../utils/role.utils.js';
 export const linkCommand = {
     data: new SlashCommandBuilder()
         .setName('link')
@@ -48,16 +49,14 @@ export const linkCommand = {
                             await interaction.editReply({ embeds: [embed], components: [row] });
                             return;
                         }
-                        // Reconcile and assign Discord roles immediately
+                        // Reconcile and assign Elite role immediately
                         if (interaction.guild) {
                             const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
                             if (member) {
-                                if (env.ROLE_PREMIUM)
-                                    await member.roles.add(env.ROLE_PREMIUM).catch(() => { });
-                                const tier = rec.tier_number || 1;
-                                const tierRoleId = tier === 1 ? env.ROLE_TIER_1 : tier === 2 ? env.ROLE_TIER_2 : env.ROLE_TIER_3;
-                                if (tierRoleId)
-                                    await member.roles.add(tierRoleId).catch(() => { });
+                                const eliteRole = resolveGuildRole(interaction.guild, env.ROLE_ELITE, 'Elite') ||
+                                    resolveGuildRole(interaction.guild, env.ROLE_PREMIUM, 'Premium');
+                                if (eliteRole)
+                                    await member.roles.add(eliteRole.id).catch(() => { });
                             }
                         }
                         // Mark verified in Supabase if needed
@@ -170,7 +169,7 @@ export const subscriptionCommand = {
                             subscriptionStatus: 'ACTIVE',
                             currentTier: rec.tier_number || 1,
                             subscriptionExpiresAt: new Date(new Date(rec.created_at).getTime() + (rec.access_duration_days || 30) * 24 * 60 * 60 * 1000),
-                            subscriptions: [{ plan: rec.plan_name || `Tier ${rec.tier_number || 1}` }],
+                            subscriptions: [{ plan: rec.plan_name || 'Elite' }],
                         };
                     }
                 }
@@ -195,9 +194,9 @@ export const subscriptionCommand = {
             .setStyle(ButtonStyle.Link)
             .setURL(portalUrl));
         const embed = createInfoEmbed('💳 Subscription & Access Status', `**Student Email:** \`${user.email}\`\n` +
-            `**Current Status:** \`${user.subscriptionStatus}\`\n` +
-            `**Current Tier:** **Tier ${user.currentTier}**\n` +
-            `**Plan:** \`${latestSub?.plan || 'Standard'}\`\n` +
+            `**Membership:** **Elite Member**\n` +
+            `**Status:** \`${user.subscriptionStatus}\`\n` +
+            `**Plan:** \`${latestSub?.plan || 'Elite Access'}\`\n` +
             `**Expires/Renews:** ${expiresDate}\n\n` +
             `*Source of Truth: Supabase Cloud Database. Synchronized via Academy Admin Payments.*`);
         await interaction.editReply({ embeds: [embed], components: [row] });

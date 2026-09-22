@@ -129,12 +129,13 @@ export class PaymentVerificationSyncService {
           );
 
           const managedRoles = [
+            env.ROLE_ELITE,
             env.ROLE_PREMIUM,
             env.ROLE_TIER_1,
             env.ROLE_TIER_2,
             env.ROLE_TIER_3,
             env.ROLE_GRADUATE,
-          ].filter(Boolean);
+          ].filter((r): r is string => Boolean(r));
           const rolesToRemove = managedRoles.filter(r => member.roles.cache.has(r));
           if (rolesToRemove.length > 0) {
             await member.roles.remove(rolesToRemove).catch(() => {});
@@ -155,7 +156,7 @@ export class PaymentVerificationSyncService {
           continue;
         }
 
-        // Determine roles to assign
+        // Determine roles to assign - Single Elite Role model
         const resolveRoleInGuild = (id: string | undefined, nameFallback: string): string | null => {
           if (id && guild.roles.cache.has(id)) return id;
           const found = guild.roles.cache.find(r => r.name.toLowerCase() === nameFallback.toLowerCase());
@@ -164,22 +165,21 @@ export class PaymentVerificationSyncService {
 
         const rolesToAdd: string[] = [];
 
-        const premRoleId = resolveRoleInGuild(env.ROLE_PREMIUM, 'Premium');
-        if (premRoleId && !member.roles.cache.has(premRoleId)) {
-          rolesToAdd.push(premRoleId);
+        const eliteRoleId = resolveRoleInGuild(env.ROLE_ELITE, 'Elite') || resolveRoleInGuild(env.ROLE_PREMIUM, 'Premium');
+        if (eliteRoleId && !member.roles.cache.has(eliteRoleId)) {
+          rolesToAdd.push(eliteRoleId);
         }
 
-        if (tier >= 1) {
-          const t1 = resolveRoleInGuild(env.ROLE_TIER_1, 'Tier-1');
-          if (t1 && !member.roles.cache.has(t1)) rolesToAdd.push(t1);
-        }
-        if (tier >= 2) {
-          const t2 = resolveRoleInGuild(env.ROLE_TIER_2, 'Tier-2');
-          if (t2 && !member.roles.cache.has(t2)) rolesToAdd.push(t2);
-        }
-        if (tier >= 3) {
-          const t3 = resolveRoleInGuild(env.ROLE_TIER_3, 'Tier-3');
-          if (t3 && !member.roles.cache.has(t3)) rolesToAdd.push(t3);
+        // Clean up any deprecated tier roles if present
+        const deprecatedRoles = [
+          env.ROLE_TIER_1,
+          env.ROLE_TIER_2,
+          env.ROLE_TIER_3,
+          env.ROLE_GRADUATE,
+        ].filter((r): r is string => Boolean(r));
+        const legacyToRemove = deprecatedRoles.filter(r => member.roles.cache.has(r));
+        if (legacyToRemove.length > 0) {
+          await member.roles.remove(legacyToRemove).catch(() => {});
         }
 
         if (rolesToAdd.length > 0) {
@@ -344,10 +344,10 @@ export class PaymentVerificationSyncService {
       .setColor(COLORS.SUCCESS)
       .setDescription(
         `Hello **${record.student_name}**, your payment proof of **${record.amount} ${record.currency || 'NPR'}** has been **approved** by our administration!\n\n` +
-        `• **Verified Plan:** **Tier ${tier}** + Premium Subscriber\n` +
+        `• **Membership:** **Elite Member**\n` +
         `• **Access Duration:** **${durationDays} Days**\n` +
         `• **Transaction Reference:** \`${record.transaction_id || 'VERIFIED'}\`\n\n` +
-        `Your Discord roles have been assigned automatically. You now have full access to your private tier channels and scheduled classes!\n\n` +
+        `Your **@Elite** role has been assigned automatically. You now have full access to our premium community channels and scheduled live classes!\n\n` +
         `📅 **Check Scheduled Classes:** Run \`/meeting list\`\n` +
         `💳 **View Subscription Details:** Run \`/subscription\`\n\n` +
         `Welcome to the Academy! Let's build your success together.`
@@ -365,25 +365,25 @@ export class PaymentVerificationSyncService {
       logger.info({ memberId: member.id }, 'Could not deliver DM (user has private DMs closed)');
     }
 
-    // 2. Post welcoming announcement in welcome or announcements channel
+    // 2. Post welcoming announcement in welcome channel
     try {
-      const welcomeChannelId = env.CHANNEL_WELCOME || env.CHANNEL_ANNOUNCEMENTS;
-      if (welcomeChannelId) {
-        const channel = member.guild.channels.cache.get(welcomeChannelId) as TextChannel;
-        if (channel && channel.isTextBased()) {
-          const publicEmbed = new EmbedBuilder()
-            .setTitle('🎓 New Subscriber Verified & Welcomed!')
-            .setColor(COLORS.PRIMARY)
-            .setDescription(
-              `Please welcome <@${member.id}> to **The Elite Circle Academy**!\n\n` +
-              `• **Access Granted:** **Tier ${tier}** & Premium Subscriber\n` +
-              `• **Live Classes & Meetings:** Check \`/meeting list\` to join upcoming live training!`
-            )
-            .setFooter(EMBED_FOOTER)
-            .setTimestamp();
+      const welcomeChannel = member.guild.channels.cache.find(
+        c => (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()
+      ) as TextChannel | undefined;
 
-          await channel.send({ embeds: [publicEmbed], components: [row] }).catch(() => {});
-        }
+      if (welcomeChannel) {
+        const publicEmbed = new EmbedBuilder()
+          .setTitle('🎓 New Elite Member Welcomed!')
+          .setColor(COLORS.PRIMARY)
+          .setDescription(
+            `Please welcome <@${member.id}> to **The Elite Circle Academy**!\n\n` +
+            `• **Membership:** **Elite Member**\n` +
+            `• **Live Classes & Meetings:** Check \`/meeting list\` to join upcoming live training!`
+          )
+          .setFooter(EMBED_FOOTER)
+          .setTimestamp();
+
+        await welcomeChannel.send({ embeds: [publicEmbed] }).catch(() => {});
       }
     } catch {
       // Ignore channel announcement failures
