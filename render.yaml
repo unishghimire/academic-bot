@@ -20,9 +20,9 @@ services:
       - key: DISCORD_TOKEN
         sync: false
       - key: DISCORD_CLIENT_ID
-        sync: false
+        value: "1545687507725979768"
       - key: DISCORD_GUILD_ID
-        sync: false
+        value: "1545688175148535818"
       - key: STUDENT_PORTAL_URL
         value: https://academic-student-portal.vercel.app
       - key: ACADEMY_WEBSITE_URL
@@ -32,14 +32,14 @@ services:
       - key: ACADEMY_API_SECRET
         generateValue: true
       - key: ROLE_PREMIUM
-        sync: false
+        value: "1545689925066694698"
       - key: ROLE_TIER_1
-        sync: false
+        value: "1545689923007291484"
       - key: ROLE_TIER_2
-        sync: false
+        value: "1545689921308721177"
       - key: ROLE_TIER_3
-        sync: false
+        value: "1545689919480004732"
       - key: ROLE_ADMIN
-        sync: false
+        value: "1545689913628950558"
       - key: ROLE_INSTRUCTOR
-        sync: false
+        value: "1545689915440766976"

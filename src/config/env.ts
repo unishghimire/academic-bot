@@ -12,17 +12,17 @@ const envSchema = z.object({
 
   // Discord Credentials
   DISCORD_TOKEN: z.string().default('mock_token'),
-  DISCORD_CLIENT_ID: z.string().default('mock_client_id'),
-  DISCORD_GUILD_ID: z.string().default('mock_guild_id'),
+  DISCORD_CLIENT_ID: z.string().default('1545687507725979768'),
+  DISCORD_GUILD_ID: z.string().default('1545688175148535818'),
 
-  // Roles
-  ROLE_PREMIUM: z.string().default('100000000000000001'),
-  ROLE_TIER_1: z.string().default('100000000000000002'),
-  ROLE_TIER_2: z.string().default('100000000000000003'),
-  ROLE_TIER_3: z.string().default('100000000000000004'),
-  ROLE_GRADUATE: z.string().default('100000000000000005'),
-  ROLE_INSTRUCTOR: z.string().default('100000000000000006'),
-  ROLE_ADMIN: z.string().default('100000000000000007'),
+  // Roles for Server 1545688175148535818
+  ROLE_PREMIUM: z.string().default('1545689925066694698'),
+  ROLE_TIER_1: z.string().default('1545689923007291484'),
+  ROLE_TIER_2: z.string().default('1545689921308721177'),
+  ROLE_TIER_3: z.string().default('1545689919480004732'),
+  ROLE_GRADUATE: z.string().default('1545689916967485442'),
+  ROLE_INSTRUCTOR: z.string().default('1545689915440766976'),
+  ROLE_ADMIN: z.string().default('1545689913628950558'),
 
   // Channels
   CHANNEL_WELCOME: z.string().optional(),
