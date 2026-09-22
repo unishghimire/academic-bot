@@ -117,21 +117,36 @@ export class PaymentVerificationSyncService {
                     continue;
                 }
                 // Determine roles to assign
+                const resolveRoleInGuild = (id, nameFallback) => {
+                    if (id && guild.roles.cache.has(id))
+                        return id;
+                    const found = guild.roles.cache.find(r => r.name.toLowerCase() === nameFallback.toLowerCase());
+                    return found ? found.id : null;
+                };
                 const rolesToAdd = [];
-                if (env.ROLE_PREMIUM && !member.roles.cache.has(env.ROLE_PREMIUM)) {
-                    rolesToAdd.push(env.ROLE_PREMIUM);
+                const premRoleId = resolveRoleInGuild(env.ROLE_PREMIUM, 'Premium');
+                if (premRoleId && !member.roles.cache.has(premRoleId)) {
+                    rolesToAdd.push(premRoleId);
                 }
-                if (tier >= 1 && env.ROLE_TIER_1 && !member.roles.cache.has(env.ROLE_TIER_1)) {
-                    rolesToAdd.push(env.ROLE_TIER_1);
+                if (tier >= 1) {
+                    const t1 = resolveRoleInGuild(env.ROLE_TIER_1, 'Tier-1');
+                    if (t1 && !member.roles.cache.has(t1))
+                        rolesToAdd.push(t1);
                 }
-                if (tier >= 2 && env.ROLE_TIER_2 && !member.roles.cache.has(env.ROLE_TIER_2)) {
-                    rolesToAdd.push(env.ROLE_TIER_2);
+                if (tier >= 2) {
+                    const t2 = resolveRoleInGuild(env.ROLE_TIER_2, 'Tier-2');
+                    if (t2 && !member.roles.cache.has(t2))
+                        rolesToAdd.push(t2);
                 }
-                if (tier >= 3 && env.ROLE_TIER_3 && !member.roles.cache.has(env.ROLE_TIER_3)) {
-                    rolesToAdd.push(env.ROLE_TIER_3);
+                if (tier >= 3) {
+                    const t3 = resolveRoleInGuild(env.ROLE_TIER_3, 'Tier-3');
+                    if (t3 && !member.roles.cache.has(t3))
+                        rolesToAdd.push(t3);
                 }
                 if (rolesToAdd.length > 0) {
-                    await member.roles.add(rolesToAdd);
+                    await member.roles.add(rolesToAdd).catch(err => {
+                        logger.warn({ err: err?.message, memberId: member.id }, 'Failed to assign some subscriber roles');
+                    });
                     logger.info({ memberId: member.id, roles: rolesToAdd, tier }, 'Assigned Discord subscriber roles after admin database approval');
                     result.rolesAssigned++;
                 }

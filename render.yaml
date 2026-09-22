@@ -22,7 +22,7 @@ services:
       - key: DISCORD_CLIENT_ID
         value: "1545687507725979768"
       - key: DISCORD_GUILD_ID
-        value: "1545688175148535818"
+        value: "1443245164200988724"
       - key: STUDENT_PORTAL_URL
         value: https://academic-student-portal.vercel.app
       - key: ACADEMY_WEBSITE_URL

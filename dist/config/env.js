@@ -9,8 +9,8 @@ const envSchema = z.object({
     // Discord Credentials
     DISCORD_TOKEN: z.string().default('mock_token'),
     DISCORD_CLIENT_ID: z.string().default('1545687507725979768'),
-    DISCORD_GUILD_ID: z.string().default('1545688175148535818'),
-    // Roles for Server 1545688175148535818
+    DISCORD_GUILD_ID: z.string().default('1443245164200988724'),
+    // Roles for Server 1443245164200988724
     ROLE_PREMIUM: z.string().default('1545689925066694698'),
     ROLE_TIER_1: z.string().default('1545689923007291484'),
     ROLE_TIER_2: z.string().default('1545689921308721177'),

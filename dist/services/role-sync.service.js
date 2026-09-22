@@ -129,27 +129,64 @@ export class RoleSyncService {
             return null;
         }
         const { expectedRoleIds, prohibitedRoleIds } = this.computeExpectedRoles(user);
+        // Resolve configured role IDs against current guild cache, falling back to name
+        const resolveRoleInGuild = (id) => {
+            if (guild.roles.cache.has(id))
+                return id;
+            if (id === env.ROLE_PREMIUM) {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'premium');
+                if (r)
+                    return r.id;
+            }
+            if (id === env.ROLE_TIER_1) {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'tier-1');
+                if (r)
+                    return r.id;
+            }
+            if (id === env.ROLE_TIER_2) {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'tier-2');
+                if (r)
+                    return r.id;
+            }
+            if (id === env.ROLE_TIER_3) {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'tier-3');
+                if (r)
+                    return r.id;
+            }
+            if (id === env.ROLE_GRADUATE) {
+                const r = guild.roles.cache.find(x => x.name.toLowerCase() === 'graduate');
+                if (r)
+                    return r.id;
+            }
+            return null;
+        };
         const rolesToAdd = [];
         const rolesToRemove = [];
-        // Check what needs to be added
+        // Check what needs to be added (only if role exists in guild and member does not already have it)
         for (const roleId of expectedRoleIds) {
-            if (!member.roles.cache.has(roleId)) {
-                rolesToAdd.push(roleId);
+            const resolved = resolveRoleInGuild(roleId);
+            if (resolved && !member.roles.cache.has(resolved)) {
+                rolesToAdd.push(resolved);
             }
         }
-        // Check what needs to be removed
+        // Check what needs to be removed (only if member currently has it)
         for (const roleId of prohibitedRoleIds) {
-            if (member.roles.cache.has(roleId)) {
-                rolesToRemove.push(roleId);
+            const resolved = resolveRoleInGuild(roleId);
+            if (resolved && member.roles.cache.has(resolved)) {
+                rolesToRemove.push(resolved);
             }
         }
         const unchanged = rolesToAdd.length === 0 && rolesToRemove.length === 0;
         if (!unchanged) {
             if (rolesToAdd.length > 0) {
-                await member.roles.add(rolesToAdd);
+                await member.roles.add(rolesToAdd).catch(err => {
+                    logger.warn({ err: err?.message, discordId: user.discordId }, 'Failed to add some Discord roles');
+                });
             }
             if (rolesToRemove.length > 0) {
-                await member.roles.remove(rolesToRemove);
+                await member.roles.remove(rolesToRemove).catch(err => {
+                    logger.warn({ err: err?.message, discordId: user.discordId }, 'Failed to remove some Discord roles');
+                });
             }
             // Record correction to append-only audit log
             await auditService.log({

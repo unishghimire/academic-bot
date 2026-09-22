@@ -55,13 +55,41 @@ export function createDiscordClient(): Client {
       activities: [{ name: 'Academy Subscriptions | /verify-proof', type: ActivityType.Watching }],
     });
 
-    // Automatically synchronize slash commands if running with live credentials
-    if (env.DISCORD_TOKEN !== 'mock_token') {
-      try {
-        await deployCommands();
-      } catch (err) {
-        logger.warn({ err }, 'Slash command auto-deployment on ready encountered an error');
+    // Enforce dedicated single-server operation: leave any unauthorized guilds
+    for (const [guildId, guild] of readyClient.guilds.cache) {
+      if (guildId !== env.DISCORD_GUILD_ID) {
+        logger.warn(
+          { guildId, guildName: guild.name, targetGuildId: env.DISCORD_GUILD_ID },
+          'Leaving unauthorized server to enforce dedicated single-server restriction.'
+        );
+        try {
+          await guild.leave();
+        } catch (err) {
+          logger.warn({ err, guildId }, 'Failed to leave unauthorized guild');
+        }
       }
+    }
+
+    // Check if connected to target server
+    const targetGuild = readyClient.guilds.cache.get(env.DISCORD_GUILD_ID);
+    if (targetGuild) {
+      logger.info(
+        { guildId: targetGuild.id, guildName: targetGuild.name },
+        'Connected to authorized server. Deploying slash commands...'
+      );
+      if (env.DISCORD_TOKEN !== 'mock_token') {
+        try {
+          await deployCommands();
+        } catch (err) {
+          logger.warn({ err }, 'Slash command auto-deployment on ready encountered an error');
+        }
+      }
+    } else {
+      const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${readyClient.user.id}&permissions=8&integration_type=0&scope=bot+applications.commands&guild_id=${env.DISCORD_GUILD_ID}`;
+      logger.warn(
+        { targetGuildId: env.DISCORD_GUILD_ID, inviteUrl },
+        '⚠️ Bot is NOT in the authorized server yet! Please invite the bot using the URL above.'
+      );
     }
 
     // Initialize scheduled cron and worker jobs
@@ -70,11 +98,53 @@ export function createDiscordClient(): Client {
     initPaymentSyncJob(client);
   });
 
+  // Automatically enforce single-server restriction upon new guild join
+  client.on(Events.GuildCreate, async guild => {
+    if (guild.id !== env.DISCORD_GUILD_ID) {
+      logger.warn(
+        { guildId: guild.id, guildName: guild.name, targetGuildId: env.DISCORD_GUILD_ID },
+        'Bot joined an unauthorized server. Leaving immediately to enforce single-server restriction.'
+      );
+      try {
+        await guild.leave();
+      } catch (err) {
+        logger.warn({ err, guildId: guild.id }, 'Failed to leave unauthorized guild on join');
+      }
+      return;
+    }
+
+    logger.info(
+      { guildId: guild.id, guildName: guild.name },
+      '🎉 Bot was added to designated authorized server! Synchronizing slash commands...'
+    );
+    try {
+      await deployCommands();
+      logger.info('Slash commands successfully deployed to authorized server.');
+    } catch (err) {
+      logger.error({ err }, 'Failed to deploy slash commands after joining authorized server');
+    }
+  });
+
   client.on(Events.Error, error => {
     logger.error({ err: error }, 'Discord client encountered a network or websocket error');
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
+    // Restrict all interactions to the authorized guild
+    if (interaction.guildId && interaction.guildId !== env.DISCORD_GUILD_ID) {
+      logger.warn(
+        { guildId: interaction.guildId, targetGuildId: env.DISCORD_GUILD_ID },
+        'Ignored interaction from unauthorized server.'
+      );
+      if (interaction.isRepliable()) {
+        await interaction.reply({
+          content: '❌ This bot is private and is strictly configured to only operate within its authorized server.',
+          ephemeral: true,
+        }).catch(() => {});
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     const command = commandMap.get(interaction.commandName);
