@@ -10,6 +10,21 @@ export interface ProcessSubscriptionParams {
     expiresAt: Date | null;
     cancelledAt?: Date | null;
 }
+export interface ExpiredUserSummary {
+    id: string;
+    discordId: string | null;
+    email: string;
+    expiresAt: Date;
+    tier: number;
+}
+export interface ExpiringUserSummary {
+    id: string;
+    discordId: string | null;
+    email: string;
+    expiresAt: Date;
+    tier: number;
+    hoursRemaining: number;
+}
 export declare class SubscriptionService {
     private db;
     private auditor;
@@ -27,19 +42,20 @@ export declare class SubscriptionService {
         status: SubscriptionStatus;
     }>;
     /**
-     * Sweeps expired subscriptions where expiresAt has passed.
-     * Critical guarantee: Never deletes lesson_progress, quiz_attempts, XP events, streaks, or achievements!
+     * Sweeps expired subscriptions across PostgreSQL, Supabase, and local storage.
+     * Returns rich user metadata for role removal and DM notifications.
+     * Invariant: Never deletes lesson_progress, quiz_attempts, XP events, streaks, or achievements!
+     */
+    sweepExpiredSubscriptionsDetailed(): Promise<ExpiredUserSummary[]>;
+    /**
+     * Sweeps expired subscriptions and returns array of swept user IDs.
+     * Backward-compatible with existing test suites.
      */
     sweepExpiredSubscriptions(): Promise<string[]>;
     /**
-     * Finds users whose subscriptions expire within a given window (e.g. 7 days, 3 days, 24 hours)
-     * for throttled notifications.
+     * Finds active users whose subscriptions expire within a given window (e.g. 72 hours for 3 days notice)
+     * across PostgreSQL, Supabase, and local storage.
      */
-    findExpiringUsers(withinHours: number): Promise<Array<{
-        id: string;
-        discordId: string | null;
-        email: string;
-        expiresAt: Date;
-    }>>;
+    findExpiringUsers(withinHours: number): Promise<ExpiringUserSummary[]>;
 }
 export declare const subscriptionService: SubscriptionService;

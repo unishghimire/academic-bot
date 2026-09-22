@@ -1,15 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.tierEngine = exports.TierEngineService = void 0;
-const client_1 = require("@prisma/client");
-const client_js_1 = require("../db/client.js");
-const audit_service_js_1 = require("./audit.service.js");
-const logger_js_1 = require("../utils/logger.js");
-const constants_js_1 = require("../config/constants.js");
-class TierEngineService {
+import { SubscriptionStatus, ProjectStatus } from '@prisma/client';
+import { prisma as defaultPrisma } from '../db/client.js';
+import { auditService } from './audit.service.js';
+import { logger } from '../utils/logger.js';
+import { TIER_LEVELS } from '../config/constants.js';
+export class TierEngineService {
     db;
     auditor;
-    constructor(db = client_js_1.prisma, auditor = audit_service_js_1.auditService) {
+    constructor(db = defaultPrisma, auditor = auditService) {
         this.db = db;
         this.auditor = auditor;
     }
@@ -32,14 +29,14 @@ class TierEngineService {
         if (!user) {
             throw new Error(`User ${userId} not found`);
         }
-        const isActive = user.subscriptionStatus === client_1.SubscriptionStatus.ACTIVE;
+        const isActive = user.subscriptionStatus === SubscriptionStatus.ACTIVE;
         // Fetch all lessons in catalog by tier
         const allLessons = await this.db.lesson.findMany({
             orderBy: [{ tier: 'asc' }, { module: 'asc' }, { orderIndex: 'asc' }],
         });
-        const tier1Lessons = allLessons.filter(l => l.tier === constants_js_1.TIER_LEVELS.TIER_1);
-        const tier2Lessons = allLessons.filter(l => l.tier === constants_js_1.TIER_LEVELS.TIER_2);
-        const tier3Lessons = allLessons.filter(l => l.tier === constants_js_1.TIER_LEVELS.TIER_3);
+        const tier1Lessons = allLessons.filter(l => l.tier === TIER_LEVELS.TIER_1);
+        const tier2Lessons = allLessons.filter(l => l.tier === TIER_LEVELS.TIER_2);
+        const tier3Lessons = allLessons.filter(l => l.tier === TIER_LEVELS.TIER_3);
         // Check lesson completion status for each tier
         const completedLessonIds = new Set(user.lessonProgress.filter(lp => lp.completed).map(lp => lp.lessonId));
         const tier1CompletedCount = tier1Lessons.filter(l => completedLessonIds.has(l.id)).length;
@@ -47,10 +44,10 @@ class TierEngineService {
         const tier3CompletedCount = tier3Lessons.filter(l => completedLessonIds.has(l.id)).length;
         // Check tier final project approvals
         const approvedProjects = new Set(user.projectSubmissions
-            .filter(ps => ps.status === client_1.ProjectStatus.APPROVED)
+            .filter(ps => ps.status === ProjectStatus.APPROVED)
             .map(ps => ps.project.tier));
-        const tier1ProjectApproved = approvedProjects.has(constants_js_1.TIER_LEVELS.TIER_1);
-        const tier2ProjectApproved = approvedProjects.has(constants_js_1.TIER_LEVELS.TIER_2);
+        const tier1ProjectApproved = approvedProjects.has(TIER_LEVELS.TIER_1);
+        const tier2ProjectApproved = approvedProjects.has(TIER_LEVELS.TIER_2);
         const tier1Complete = tier1Lessons.length > 0 &&
             tier1CompletedCount === tier1Lessons.length &&
             tier1ProjectApproved;
@@ -64,15 +61,15 @@ class TierEngineService {
         // Determine eligible tier
         let eligibleTier = 0;
         if (isActive) {
-            eligibleTier = constants_js_1.TIER_LEVELS.TIER_1; // Tier 1 unlocked with active subscription
+            eligibleTier = TIER_LEVELS.TIER_1; // Tier 1 unlocked with active subscription
             if (tier1Complete) {
-                eligibleTier = constants_js_1.TIER_LEVELS.TIER_2;
+                eligibleTier = TIER_LEVELS.TIER_2;
             }
             if (tier2Complete) {
-                eligibleTier = constants_js_1.TIER_LEVELS.TIER_3;
+                eligibleTier = TIER_LEVELS.TIER_3;
             }
             if (tier3Complete) {
-                eligibleTier = constants_js_1.TIER_LEVELS.GRADUATE;
+                eligibleTier = TIER_LEVELS.GRADUATE;
             }
         }
         const previousTier = user.currentTier;
@@ -94,7 +91,7 @@ class TierEngineService {
                 after: { currentTier: eligibleTier },
             });
             unlocked = true;
-            logger_js_1.logger.info({ userId, previousTier, newTier: eligibleTier }, 'Tier advancement unlocked');
+            logger.info({ userId, previousTier, newTier: eligibleTier }, 'Tier advancement unlocked');
         }
         return {
             userId,
@@ -146,9 +143,8 @@ class TierEngineService {
             before: { currentTier: user.currentTier },
             after: { currentTier: targetTier },
         });
-        logger_js_1.logger.warn({ userId, adminId, previousTier: user.currentTier, targetTier, reason }, 'Admin tier override applied');
+        logger.warn({ userId, adminId, previousTier: user.currentTier, targetTier, reason }, 'Admin tier override applied');
     }
 }
-exports.TierEngineService = TierEngineService;
-exports.tierEngine = new TierEngineService();
+export const tierEngine = new TierEngineService();
 //# sourceMappingURL=tier-engine.service.js.map

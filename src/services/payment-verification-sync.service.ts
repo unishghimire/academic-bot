@@ -111,8 +111,51 @@ export class PaymentVerificationSyncService {
           continue;
         }
 
-        // Determine roles to assign
         const tier = record.tier_number || 1;
+
+        // Verify payment is not expired
+        const baseDate = record.created_at ? new Date(record.created_at) : new Date();
+        const duration = record.access_duration_days || 30;
+        const expiresAt = record.expires_at
+          ? new Date(record.expires_at)
+          : new Date(baseDate.getTime() + duration * 86400000);
+
+        const isExpired = expiresAt.getTime() <= Date.now();
+
+        if (isExpired) {
+          logger.info(
+            { memberId: member.id, expiresAt: expiresAt.toISOString() },
+            'Payment verification record is already expired; removing roles if present.'
+          );
+
+          const managedRoles = [
+            env.ROLE_PREMIUM,
+            env.ROLE_TIER_1,
+            env.ROLE_TIER_2,
+            env.ROLE_TIER_3,
+            env.ROLE_GRADUATE,
+          ].filter(Boolean);
+          const rolesToRemove = managedRoles.filter(r => member.roles.cache.has(r));
+          if (rolesToRemove.length > 0) {
+            await member.roles.remove(rolesToRemove).catch(() => {});
+          }
+
+          localStore.saveUser({
+            id: `usr_${member.id}`,
+            email: record.email || `${member.user.username}@discord.local`,
+            discordId: member.id,
+            currentTier: tier,
+            subscriptionStatus: SubscriptionStatus.EXPIRED,
+            subscriptionExpiresAt: expiresAt,
+          });
+
+          if (!record.is_discord_verified) {
+            await this.markRecordVerified(record.id, member.id);
+          }
+          continue;
+        }
+
+        // Determine roles to assign
         const rolesToAdd: string[] = [];
 
         if (env.ROLE_PREMIUM && !member.roles.cache.has(env.ROLE_PREMIUM)) {
@@ -145,7 +188,7 @@ export class PaymentVerificationSyncService {
           discordId: member.id,
           currentTier: tier,
           subscriptionStatus: SubscriptionStatus.ACTIVE,
-          subscriptionExpiresAt: new Date(Date.now() + (record.access_duration_days || 30) * 24 * 60 * 60 * 1000),
+          subscriptionExpiresAt: expiresAt,
         });
 
         // Mark record as verified in database if not yet marked

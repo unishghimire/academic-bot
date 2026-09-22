@@ -1,12 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.xpService = exports.XpService = void 0;
-const client_js_1 = require("../db/client.js");
-const constants_js_1 = require("../config/constants.js");
-const logger_js_1 = require("../utils/logger.js");
-class XpService {
+import { prisma as defaultPrisma } from '../db/client.js';
+import { XP_REWARDS } from '../config/constants.js';
+import { logger } from '../utils/logger.js';
+export class XpService {
     db;
-    constructor(db = client_js_1.prisma) {
+    constructor(db = defaultPrisma) {
         this.db = db;
     }
     /**
@@ -24,7 +21,7 @@ class XpService {
             },
         });
         const newTotal = await this.getUserTotalXp(userId);
-        logger_js_1.logger.info({ userId, amount, reason, newTotal }, 'XP awarded to student');
+        logger.info({ userId, amount, reason, newTotal }, 'XP awarded to student');
         return newTotal;
     }
     /**
@@ -80,7 +77,7 @@ class XpService {
                 },
             });
             // Award daily streak XP
-            await this.awardXp(userId, constants_js_1.XP_REWARDS.DAILY_ACTIVITY_STREAK, `Daily learning streak maintained: ${streakCount} day(s)`, 'streak');
+            await this.awardXp(userId, XP_REWARDS.DAILY_ACTIVITY_STREAK, `Daily learning streak maintained: ${streakCount} day(s)`, 'streak');
         }
         return { streakCount, streakExtended };
     }
@@ -130,7 +127,7 @@ class XpService {
                     },
                 });
                 newlyUnlocked.push(m.name);
-                logger_js_1.logger.info({ userId, achievementKey: m.key }, 'Achievement unlocked');
+                logger.info({ userId, achievementKey: m.key }, 'Achievement unlocked');
             }
         }
         return newlyUnlocked;
@@ -164,6 +161,5 @@ class XpService {
         return ranked;
     }
 }
-exports.XpService = XpService;
-exports.xpService = new XpService();
+export const xpService = new XpService();
 //# sourceMappingURL=xp.service.js.map

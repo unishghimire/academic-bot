@@ -5,6 +5,7 @@ import {
   Events,
   Interaction,
   ActivityType,
+  Options,
 } from 'discord.js';
 import { env } from '../config/env.js';
 import { commandMap } from './commands/index.js';
@@ -26,6 +27,23 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.GuildMessages,
     ],
     partials: [Partials.GuildMember, Partials.User],
+    // Low-RAM optimizations to prevent Out Of Memory (Exit 137) on container hosts
+    makeCache: Options.cacheWithLimits({
+      MessageManager: 25, // Only retain last 25 messages per channel
+      PresenceManager: 0,
+      ReactionManager: 0,
+      ThreadManager: 0,
+      VoiceStateManager: 0,
+      AutoModerationRuleManager: 0,
+      GuildScheduledEventManager: 0,
+    }),
+    sweepers: {
+      ...Options.DefaultSweeperSettings,
+      messages: {
+        interval: 300, // Sweep every 5 minutes
+        lifetime: 600, // Evict messages older than 10 minutes
+      },
+    },
   });
 
   client.once(Events.ClientReady, async readyClient => {

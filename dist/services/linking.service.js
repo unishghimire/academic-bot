@@ -1,37 +1,31 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.linkingService = exports.LinkingService = void 0;
-const crypto_1 = __importDefault(require("crypto"));
-const client_js_1 = require("../db/client.js");
-const env_js_1 = require("../config/env.js");
-const audit_service_js_1 = require("./audit.service.js");
-const logger_js_1 = require("../utils/logger.js");
-const local_store_js_1 = require("../db/local-store.js");
-const supabase_js_1 = require("../db/supabase.js");
-class LinkingService {
+import crypto from 'crypto';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
+import { env } from '../config/env.js';
+import { auditService } from './audit.service.js';
+import { logger } from '../utils/logger.js';
+import { localStore } from '../db/local-store.js';
+import { getSupabaseClient } from '../db/supabase.js';
+export class LinkingService {
     db;
-    constructor(db = client_js_1.prisma) {
+    constructor(db = defaultPrisma) {
         this.db = db;
     }
     isOffline() {
-        return this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)();
+        return this.db === defaultPrisma && !isPostgresOnline();
     }
     /**
      * Generates a short-lived (15 min) 6-character linking code initiated from /link in Discord
      */
     async createLinkingCodeForDiscordUser(discordId) {
-        const code = crypto_1.default.randomBytes(3).toString('hex').toUpperCase();
+        const code = crypto.randomBytes(3).toString('hex').toUpperCase();
         const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes validity
-        const portalBase = env_js_1.env.STUDENT_PORTAL_URL || env_js_1.env.ACADEMY_WEBSITE_URL || 'https://academic-student-portal.vercel.app';
+        const portalBase = env.STUDENT_PORTAL_URL || env.ACADEMY_WEBSITE_URL || 'https://academic-student-portal.vercel.app';
         const linkingUrl = `${portalBase}/link-account?code=${code}`;
         // Cloud / Supabase / Local storage mode (bypasses PostgreSQL localhost)
         if (this.isOffline()) {
-            let user = local_store_js_1.localStore.findUserByDiscordId(discordId);
+            let user = localStore.findUserByDiscordId(discordId);
             if (!user) {
-                user = local_store_js_1.localStore.saveUser({
+                user = localStore.saveUser({
                     id: `usr_${discordId}`,
                     discordId,
                     accountId: `discord_pending_${discordId}`,
@@ -42,7 +36,7 @@ class LinkingService {
                     updatedAt: new Date(),
                 });
             }
-            local_store_js_1.localStore.saveLinkingCode({
+            localStore.saveLinkingCode({
                 id: `code_${Date.now()}`,
                 userId: user.id,
                 discordId,
@@ -50,7 +44,7 @@ class LinkingService {
                 expiresAt,
                 usedAt: null,
             });
-            logger_js_1.logger.info({ discordId, userId: user.id, code }, 'Generated account linking code (cloud/local storage)');
+            logger.info({ discordId, userId: user.id, code }, 'Generated account linking code (cloud/local storage)');
             return {
                 code,
                 expiresAt,
@@ -85,7 +79,7 @@ class LinkingService {
                 expiresAt,
             },
         });
-        logger_js_1.logger.info({ discordId, userId: user.id, code }, 'Generated account linking code (PostgreSQL)');
+        logger.info({ discordId, userId: user.id, code }, 'Generated account linking code (PostgreSQL)');
         return {
             code,
             expiresAt,
@@ -99,7 +93,7 @@ class LinkingService {
     async verifyAndLinkCode(code, verifiedAccountId, verifiedEmail) {
         // Cloud / Supabase / Local storage mode (bypasses PostgreSQL localhost)
         if (this.isOffline()) {
-            const linkingCode = local_store_js_1.localStore.findLinkingCode(code);
+            const linkingCode = localStore.findLinkingCode(code);
             if (!linkingCode) {
                 throw new Error('Invalid linking code');
             }
@@ -110,7 +104,7 @@ class LinkingService {
                 throw new Error('This linking code has expired. Please run /link again in Discord');
             }
             const discordId = linkingCode.discordId;
-            let user = local_store_js_1.localStore.findUserByDiscordId(discordId) || local_store_js_1.localStore.findUserById(linkingCode.userId);
+            let user = localStore.findUserByDiscordId(discordId) || localStore.findUserById(linkingCode.userId);
             if (!user) {
                 user = {
                     id: linkingCode.userId || `usr_${discordId}`,
@@ -120,10 +114,10 @@ class LinkingService {
             user.accountId = verifiedAccountId;
             user.email = verifiedEmail;
             user.updatedAt = new Date();
-            local_store_js_1.localStore.saveUser(user);
-            local_store_js_1.localStore.markLinkingCodeUsed(code);
+            localStore.saveUser(user);
+            localStore.markLinkingCodeUsed(code);
             // Also update Supabase payment_verifications if matching email exists
-            const supabase = (0, supabase_js_1.getSupabaseClient)();
+            const supabase = getSupabaseClient();
             if (supabase) {
                 try {
                     await supabase
@@ -132,10 +126,10 @@ class LinkingService {
                         .ilike('email', verifiedEmail);
                 }
                 catch (err) {
-                    logger_js_1.logger.warn({ err }, 'Could not update Supabase on link verification');
+                    logger.warn({ err }, 'Could not update Supabase on link verification');
                 }
             }
-            await audit_service_js_1.auditService.log({
+            await auditService.log({
                 actorType: 'USER',
                 actorId: discordId,
                 action: 'ACCOUNT_LINKED',
@@ -144,7 +138,7 @@ class LinkingService {
                 reason: `Successfully bound Discord ID ${discordId} to verified Academy account ${verifiedAccountId} (${verifiedEmail})`,
                 after: { discordId, accountId: verifiedAccountId, email: verifiedEmail },
             });
-            logger_js_1.logger.info({ userId: user.id, discordId, accountId: verifiedAccountId }, 'Student account linked successfully (cloud mode)');
+            logger.info({ userId: user.id, discordId, accountId: verifiedAccountId }, 'Student account linked successfully (cloud mode)');
             return {
                 success: true,
                 userId: user.id,
@@ -206,7 +200,7 @@ class LinkingService {
             where: { id: linkingCode.id },
             data: { usedAt: new Date() },
         });
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'USER',
             actorId: discordUser.discordId,
             action: 'ACCOUNT_LINKED',
@@ -215,7 +209,7 @@ class LinkingService {
             reason: `Successfully bound Discord ID ${discordUser.discordId} to verified Academy account ${verifiedAccountId} (${verifiedEmail})`,
             after: { discordId: discordUser.discordId, accountId: verifiedAccountId, email: verifiedEmail },
         });
-        logger_js_1.logger.info({ userId: targetUserId, discordId: discordUser.discordId, accountId: verifiedAccountId }, 'Student account linked successfully');
+        logger.info({ userId: targetUserId, discordId: discordUser.discordId, accountId: verifiedAccountId }, 'Student account linked successfully');
         return {
             success: true,
             userId: targetUserId,
@@ -223,6 +217,5 @@ class LinkingService {
         };
     }
 }
-exports.LinkingService = LinkingService;
-exports.linkingService = new LinkingService();
+export const linkingService = new LinkingService();
 //# sourceMappingURL=linking.service.js.map

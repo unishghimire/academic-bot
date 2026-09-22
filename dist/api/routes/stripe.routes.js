@@ -1,28 +1,26 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createStripeRouter = createStripeRouter;
-const express_1 = require("express");
-const stripe_1 = __importDefault(require("stripe"));
-const env_js_1 = require("../../config/env.js");
-const subscription_service_js_1 = require("../../services/subscription.service.js");
-const role_sync_service_js_1 = require("../../services/role-sync.service.js");
-const error_logger_service_js_1 = require("../../services/error-logger.service.js");
-const logger_js_1 = require("../../utils/logger.js");
-function createStripeRouter(discordClient) {
-    const router = (0, express_1.Router)();
-    const stripe = env_js_1.env.STRIPE_SECRET_KEY ? new stripe_1.default(env_js_1.env.STRIPE_SECRET_KEY) : null;
+import { Router } from 'express';
+import Stripe from 'stripe';
+import { env } from '../../config/env.js';
+import { subscriptionService } from '../../services/subscription.service.js';
+import { roleSyncService } from '../../services/role-sync.service.js';
+import { errorLogger } from '../../services/error-logger.service.js';
+import { logger } from '../../utils/logger.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { prisma } from '../../db/client.js';
+import { COLORS, EMBED_FOOTER } from '../../config/constants.js';
+import { SubscriptionStatus } from '@prisma/client';
+export function createStripeRouter(discordClient) {
+    const router = Router();
+    const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
     router.post('/stripe', async (req, res) => {
-        if (!stripe || !env_js_1.env.STRIPE_WEBHOOK_SECRET) {
+        if (!stripe || !env.STRIPE_WEBHOOK_SECRET) {
             res.status(200).send('Stripe integration not configured. Manual payments are active.');
             return;
         }
         const sig = req.headers['stripe-signature'];
         let event;
         try {
-            if (env_js_1.env.NODE_ENV === 'test' && (!sig || sig === 'mock_sig')) {
+            if (env.NODE_ENV === 'test' && (!sig || sig === 'mock_sig')) {
                 // Allow mock testing
                 event = req.body;
             }
@@ -31,12 +29,12 @@ function createStripeRouter(discordClient) {
                     res.status(400).send('Webhook Error: Missing stripe-signature');
                     return;
                 }
-                event = stripe.webhooks.constructEvent(req.body, sig, env_js_1.env.STRIPE_WEBHOOK_SECRET);
+                event = stripe.webhooks.constructEvent(req.body, sig, env.STRIPE_WEBHOOK_SECRET);
             }
         }
         catch (err) {
-            logger_js_1.logger.error({ err }, 'Stripe webhook signature verification failed');
-            await error_logger_service_js_1.errorLogger.report(discordClient ?? null, {
+            logger.error({ err }, 'Stripe webhook signature verification failed');
+            await errorLogger.report(discordClient ?? null, {
                 module: 'STRIPE_WEBHOOK',
                 action: 'SIGNATURE_VERIFICATION',
                 error: err,
@@ -45,7 +43,7 @@ function createStripeRouter(discordClient) {
             return;
         }
         try {
-            logger_js_1.logger.info({ eventType: event.type, eventId: event.id }, 'Received Stripe webhook');
+            logger.info({ eventType: event.type, eventId: event.id }, 'Received Stripe webhook');
             switch (event.type) {
                 case 'customer.subscription.created':
                 case 'customer.subscription.updated':
@@ -64,11 +62,11 @@ function createStripeRouter(discordClient) {
                         }
                     }
                     if (!email) {
-                        logger_js_1.logger.warn({ customerId }, 'Unable to resolve customer email for subscription');
+                        logger.warn({ customerId }, 'Unable to resolve customer email for subscription');
                         res.status(200).json({ received: true, note: 'Email unresolved' });
                         return;
                     }
-                    const status = subscription_service_js_1.subscriptionService.mapStripeStatus(subscription.status);
+                    const status = subscriptionService.mapStripeStatus(subscription.status);
                     const expiresAt = subscription.current_period_end
                         ? new Date(subscription.current_period_end * 1000)
                         : null;
@@ -76,7 +74,7 @@ function createStripeRouter(discordClient) {
                     const cancelledAt = subscription.canceled_at
                         ? new Date(subscription.canceled_at * 1000)
                         : null;
-                    const result = await subscription_service_js_1.subscriptionService.handleSubscriptionUpdated({
+                    const result = await subscriptionService.handleSubscriptionUpdated({
                         providerRef: subscription.id,
                         email,
                         plan: subscription.items.data[0]?.price.id || 'premium_monthly',
@@ -85,31 +83,60 @@ function createStripeRouter(discordClient) {
                         expiresAt,
                         cancelledAt,
                     });
-                    // Trigger immediate role sync if Discord client is active
+                    // Trigger immediate role sync and welcome DM if Discord client is active
                     if (discordClient) {
-                        await role_sync_service_js_1.roleSyncService.syncUserRoles(result.userId, discordClient).catch(err => {
-                            logger_js_1.logger.error({ err, userId: result.userId }, 'Error triggering immediate role sync after payment');
+                        await roleSyncService.syncUserRoles(result.userId, discordClient).catch(err => {
+                            logger.error({ err, userId: result.userId }, 'Error triggering immediate role sync after payment');
                         });
+                        if (result.status === SubscriptionStatus.ACTIVE) {
+                            try {
+                                const user = await prisma.user.findUnique({ where: { id: result.userId } }).catch(() => null);
+                                if (user?.discordId) {
+                                    const discordUser = await discordClient.users.fetch(user.discordId).catch(() => null);
+                                    if (discordUser) {
+                                        const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+                                        const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
+                                            .setLabel('⚡ Open Student Portal')
+                                            .setStyle(ButtonStyle.Link)
+                                            .setURL(portalUrl));
+                                        const embed = new EmbedBuilder()
+                                            .setTitle('🎉 Payment Verified & Access Activated!')
+                                            .setColor(COLORS.SUCCESS)
+                                            .setDescription(`Welcome to **The Elite Circle Academy**!\n\n` +
+                                            `Your subscription payment has been verified and processed successfully.\n\n` +
+                                            `• **Status:** Active Subscription\n` +
+                                            `• **Expires:** ${expiresAt ? `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>` : '*Active Subscription*'}\n\n` +
+                                            `Your Discord subscriber roles have been synchronized automatically. Use \`/subscription\` to view your membership details!`)
+                                            .setFooter(EMBED_FOOTER)
+                                            .setTimestamp();
+                                        await discordUser.send({ embeds: [embed], components: [row] }).catch(() => { });
+                                    }
+                                }
+                            }
+                            catch {
+                                // Ignore DM failure
+                            }
+                        }
                     }
                     break;
                 }
                 case 'invoice.payment_succeeded': {
                     const invoice = event.data.object;
-                    logger_js_1.logger.info({ invoiceId: invoice.id, customer: invoice.customer }, 'Invoice payment succeeded');
+                    logger.info({ invoiceId: invoice.id, customer: invoice.customer }, 'Invoice payment succeeded');
                     break;
                 }
                 case 'invoice.payment_failed': {
                     const invoice = event.data.object;
-                    logger_js_1.logger.warn({ invoiceId: invoice.id, customer: invoice.customer }, 'Invoice payment failed');
+                    logger.warn({ invoiceId: invoice.id, customer: invoice.customer }, 'Invoice payment failed');
                     break;
                 }
                 default:
-                    logger_js_1.logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
+                    logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
             }
             res.status(200).json({ received: true });
         }
         catch (err) {
-            await error_logger_service_js_1.errorLogger.report(discordClient ?? null, {
+            await errorLogger.report(discordClient ?? null, {
                 module: 'STRIPE_WEBHOOK',
                 action: 'EVENT_PROCESSING',
                 error: err,

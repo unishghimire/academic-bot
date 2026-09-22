@@ -5,7 +5,10 @@ import { subscriptionService } from '../../services/subscription.service.js';
 import { roleSyncService } from '../../services/role-sync.service.js';
 import { errorLogger } from '../../services/error-logger.service.js';
 import { logger } from '../../utils/logger.js';
-import { Client } from 'discord.js';
+import { Client, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { prisma } from '../../db/client.js';
+import { COLORS, EMBED_FOOTER } from '../../config/constants.js';
+import { SubscriptionStatus } from '@prisma/client';
 
 export function createStripeRouter(discordClient?: Client | null): Router {
   const router = Router();
@@ -89,11 +92,44 @@ export function createStripeRouter(discordClient?: Client | null): Router {
             cancelledAt,
           });
 
-          // Trigger immediate role sync if Discord client is active
+          // Trigger immediate role sync and welcome DM if Discord client is active
           if (discordClient) {
             await roleSyncService.syncUserRoles(result.userId, discordClient).catch(err => {
               logger.error({ err, userId: result.userId }, 'Error triggering immediate role sync after payment');
             });
+
+            if (result.status === SubscriptionStatus.ACTIVE) {
+              try {
+                const user = await prisma.user.findUnique({ where: { id: result.userId } }).catch(() => null);
+                if (user?.discordId) {
+                  const discordUser = await discordClient.users.fetch(user.discordId).catch(() => null);
+                  if (discordUser) {
+                    const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+                    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                      new ButtonBuilder()
+                        .setLabel('⚡ Open Student Portal')
+                        .setStyle(ButtonStyle.Link)
+                        .setURL(portalUrl)
+                    );
+                    const embed = new EmbedBuilder()
+                      .setTitle('🎉 Payment Verified & Access Activated!')
+                      .setColor(COLORS.SUCCESS)
+                      .setDescription(
+                        `Welcome to **The Elite Circle Academy**!\n\n` +
+                        `Your subscription payment has been verified and processed successfully.\n\n` +
+                        `• **Status:** Active Subscription\n` +
+                        `• **Expires:** ${expiresAt ? `<t:${Math.floor(expiresAt.getTime() / 1000)}:F>` : '*Active Subscription*'}\n\n` +
+                        `Your Discord subscriber roles have been synchronized automatically. Use \`/subscription\` to view your membership details!`
+                      )
+                      .setFooter(EMBED_FOOTER)
+                      .setTimestamp();
+                    await discordUser.send({ embeds: [embed], components: [row] }).catch(() => {});
+                  }
+                }
+              } catch {
+                // Ignore DM failure
+              }
+            }
           }
 
           break;

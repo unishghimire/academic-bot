@@ -41,6 +41,34 @@ export const linkCommand = {
           if (data && data.length > 0) {
             const rec = data[0];
 
+            // Verify payment expiration
+            const baseDate = rec.created_at ? new Date(rec.created_at) : new Date();
+            const duration = rec.access_duration_days || 30;
+            const expiresAt = rec.expires_at
+              ? new Date(rec.expires_at)
+              : new Date(baseDate.getTime() + duration * 86400000);
+
+            if (expiresAt.getTime() <= Date.now()) {
+              const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+                new ButtonBuilder()
+                  .setLabel('💳 Reactivate Membership')
+                  .setStyle(ButtonStyle.Link)
+                  .setURL(portalUrl)
+              );
+
+              const embed = createWarningEmbed(
+                '⚠️ Course Subscription Expired',
+                `Welcome back <@${interaction.user.id}>. We found your account record, but your course subscription expired on <t:${Math.floor(expiresAt.getTime() / 1000)}:F>.\n\n` +
+                `• **Student:** \`${rec.student_name || interaction.user.username}\`\n` +
+                `• **Previous Tier:** Tier ${rec.tier_number || 1}\n` +
+                `• **Status:** ⚠️ **Subscription Expired**\n\n` +
+                `👉 Click the button below to reactivate your membership on the payment portal and restore your roles!`
+              );
+
+              await interaction.editReply({ embeds: [embed], components: [row] });
+              return;
+            }
+
             // Reconcile and assign Discord roles immediately
             if (interaction.guild) {
               const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);

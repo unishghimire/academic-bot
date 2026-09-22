@@ -72,5 +72,9 @@ export declare class ManualPaymentService {
      * Rejects a manual payment proof with feedback note
      */
     rejectPayment(paymentId: string, params: RejectPaymentDto): Promise<any>;
+    /**
+     * Dispatches a rich welcome DM with interactive Student Portal button upon payment approval
+     */
+    sendWelcomeApprovalDM(discordClient: Client, discordId: string, studentName: string, amount: number, currency: string, txId: string, durationDays: number, tier: number, expiresAt: Date): Promise<void>;
 }
 export declare const manualPaymentService: ManualPaymentService;

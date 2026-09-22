@@ -6,6 +6,7 @@ import { auditService } from './audit.service.js';
 import { logger } from '../utils/logger.js';
 import { TIER_LEVELS } from '../config/constants.js';
 import { localStore } from '../db/local-store.js';
+import { getSupabaseClient } from '../db/supabase.js';
 
 export interface SyncResult {
   userId: string;
@@ -20,8 +21,13 @@ export class RoleSyncService {
 
   /**
    * Derives the set of managed Academy role IDs a user should possess based on DB state.
+   * Strictly checks both subscriptionStatus AND subscriptionExpiresAt timestamp.
    */
-  computeExpectedRoles(user: { subscriptionStatus: SubscriptionStatus; currentTier: number }): {
+  computeExpectedRoles(user: {
+    subscriptionStatus: SubscriptionStatus;
+    currentTier: number;
+    subscriptionExpiresAt?: Date | string | null;
+  }): {
     expectedRoleIds: Set<string>;
     prohibitedRoleIds: Set<string>;
   } {
@@ -36,7 +42,15 @@ export class RoleSyncService {
       env.ROLE_GRADUATE,
     ].filter(Boolean);
 
-    if (user.subscriptionStatus === SubscriptionStatus.ACTIVE) {
+    // Verify user is marked ACTIVE AND expiration timestamp has not elapsed
+    const isExpired = user.subscriptionExpiresAt
+      ? new Date(user.subscriptionExpiresAt).getTime() <= Date.now()
+      : false;
+
+    const isActuallyActive =
+      user.subscriptionStatus === SubscriptionStatus.ACTIVE && !isExpired;
+
+    if (isActuallyActive) {
       expectedRoleIds.add(env.ROLE_PREMIUM);
 
       if (user.currentTier >= TIER_LEVELS.TIER_1) {
@@ -63,7 +77,7 @@ export class RoleSyncService {
         prohibitedRoleIds.add(env.ROLE_GRADUATE);
       }
     } else {
-      // Inactive, expired, or cancelled: revoke all academy progression & premium roles
+      // Inactive, expired, or cancelled: revoke all academy progression & premium roles directly
       for (const roleId of allManagedRoles) {
         prohibitedRoleIds.add(roleId);
       }
@@ -79,12 +93,45 @@ export class RoleSyncService {
   async syncUserRoles(userId: string, client: Client): Promise<SyncResult | null> {
     let user: any = null;
     if (this.db === defaultPrisma && !isPostgresOnline()) {
-      user = localStore.getUsers().find(u => u.id === userId);
+      user = localStore.getUsers().find(u => u.id === userId || u.discordId === userId);
     } else {
       try {
-        user = await this.db.user.findUnique({ where: { id: userId } });
+        user = await this.db.user.findFirst({
+          where: { OR: [{ id: userId }, { discordId: userId }] },
+        });
       } catch {
-        user = localStore.getUsers().find(u => u.id === userId);
+        user = localStore.getUsers().find(u => u.id === userId || u.discordId === userId);
+      }
+    }
+
+    if (!user) {
+      user = localStore.findUserByDiscordId(userId);
+    }
+
+    // Supabase fallback if user record is only present in payment_verifications
+    if (!user) {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          const { data } = await supabase
+            .from('payment_verifications')
+            .select('*')
+            .or(`id.eq.${userId},discord_id.eq.${userId}`)
+            .limit(1);
+          if (data && data.length > 0) {
+            const rec = data[0];
+            const baseDate = rec.created_at ? new Date(rec.created_at) : new Date();
+            const duration = rec.access_duration_days || 30;
+            const expiresAt = rec.expires_at ? new Date(rec.expires_at) : new Date(baseDate.getTime() + duration * 86400000);
+            user = {
+              id: rec.id,
+              discordId: rec.discord_id,
+              subscriptionStatus: ['approved', 'verified'].includes(rec.status?.toLowerCase()) ? SubscriptionStatus.ACTIVE : SubscriptionStatus.EXPIRED,
+              subscriptionExpiresAt: expiresAt,
+              currentTier: rec.tier_number || 1,
+            };
+          }
+        } catch {}
       }
     }
 

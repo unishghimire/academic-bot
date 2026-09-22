@@ -1,14 +1,11 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.meetingCommand = void 0;
-const discord_js_1 = require("discord.js");
-const meeting_service_js_1 = require("../../services/meeting.service.js");
-const permissions_js_1 = require("../middleware/permissions.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-const logger_js_1 = require("../../utils/logger.js");
-const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
-exports.meetingCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder, } from 'discord.js';
+import { meetingService } from '../../services/meeting.service.js';
+import { requireInstructor } from '../middleware/permissions.js';
+import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
+import { logger } from '../../utils/logger.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
+export const meetingCommand = {
+    data: new SlashCommandBuilder()
         .setName('meeting')
         .setDescription('Schedule, list, or book live meetings and consultations')
         .addSubcommand(sub => sub
@@ -41,10 +38,10 @@ exports.meetingCommand = {
     async execute(interaction) {
         const sub = interaction.options.getSubcommand();
         if (sub === 'schedule') {
-            const isAllowed = await (0, permissions_js_1.requireInstructor)(interaction);
+            const isAllowed = await requireInstructor(interaction);
             if (!isAllowed)
                 return;
-            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            if (!(await safeDeferReply(interaction, true)))
                 return;
             const title = interaction.options.getString('title', true);
             const topic = interaction.options.getString('topic', true);
@@ -56,13 +53,13 @@ exports.meetingCommand = {
             if (isNaN(scheduledDate.getTime())) {
                 await interaction.editReply({
                     embeds: [
-                        (0, embed_builder_js_1.createWarningEmbed)('Invalid Date Format', `Could not parse \`${dateStr}\` as a valid date.\n\nPlease use: \`YYYY-MM-DD HH:mm\` (e.g. \`2026-09-15 18:00 UTC\`) or an ISO timestamp.`),
+                        createWarningEmbed('Invalid Date Format', `Could not parse \`${dateStr}\` as a valid date.\n\nPlease use: \`YYYY-MM-DD HH:mm\` (e.g. \`2026-09-15 18:00 UTC\`) or an ISO timestamp.`),
                     ],
                 });
                 return;
             }
             try {
-                const meeting = await meeting_service_js_1.meetingService.scheduleMeeting({
+                const meeting = await meetingService.scheduleMeeting({
                     title,
                     topic,
                     scheduledAt: scheduledDate,
@@ -76,7 +73,7 @@ exports.meetingCommand = {
                 if (guild) {
                     const channels = await guild.channels.fetch();
                     const targetChannel = channels.find(c => c && (c.name === 'live-classes' || c.name === 'announcements') && c.isTextBased());
-                    const announcementEmbed = (0, embed_builder_js_1.createInfoEmbed)(`📅 New Meeting Scheduled: ${title}`, `**Topic:** ${topic}\n\n` +
+                    const announcementEmbed = createInfoEmbed(`📅 New Meeting Scheduled: ${title}`, `**Topic:** ${topic}\n\n` +
                         `🕒 **When:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
                         `🔗 **Join Link:** [Click Here to Join Meeting](${meetingUrl})\n` +
                         (roleMention ? `👥 **Audience:** ${roleMention}\n` : '') +
@@ -85,12 +82,12 @@ exports.meetingCommand = {
                         await targetChannel.send({
                             content: roleMention ? `📢 ${roleMention} — New meeting scheduled!` : undefined,
                             embeds: [announcementEmbed],
-                        }).catch(err => logger_js_1.logger.warn({ err }, 'Could not post to live-classes channel'));
+                        }).catch(err => logger.warn({ err }, 'Could not post to live-classes channel'));
                     }
                 }
                 await interaction.editReply({
                     embeds: [
-                        (0, embed_builder_js_1.createSuccessEmbed)('Meeting Scheduled! 📅', `Successfully scheduled **${title}**!\n\n` +
+                        createSuccessEmbed('Meeting Scheduled! 📅', `Successfully scheduled **${title}**!\n\n` +
                             `• **ID:** \`${meeting.id}\`\n` +
                             `• **Date & Time:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
                             `• **Link:** ${meetingUrl}\n` +
@@ -100,21 +97,21 @@ exports.meetingCommand = {
                 });
             }
             catch (err) {
-                logger_js_1.logger.error({ err }, 'Failed to schedule meeting');
+                logger.error({ err }, 'Failed to schedule meeting');
                 await interaction.editReply({
-                    embeds: [(0, embed_builder_js_1.createErrorEmbed)('Failed to Schedule Meeting', err.message || 'An unexpected error occurred.')],
+                    embeds: [createErrorEmbed('Failed to Schedule Meeting', err.message || 'An unexpected error occurred.')],
                 });
             }
         }
         else if (sub === 'list') {
-            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            if (!(await safeDeferReply(interaction, true)))
                 return;
             try {
-                const meetings = await meeting_service_js_1.meetingService.listUpcomingMeetings();
+                const meetings = await meetingService.listUpcomingMeetings();
                 if (!meetings || meetings.length === 0) {
                     await interaction.editReply({
                         embeds: [
-                            (0, embed_builder_js_1.createInfoEmbed)('📅 Upcoming Meetings', 'There are currently no upcoming meetings or live classes scheduled.\n\nCheck back soon or ask an instructor in the support channel!'),
+                            createInfoEmbed('📅 Upcoming Meetings', 'There are currently no upcoming meetings or live classes scheduled.\n\nCheck back soon or ask an instructor in the support channel!'),
                         ],
                     });
                     return;
@@ -130,38 +127,38 @@ exports.meetingCommand = {
                         `• *ID:* \`${m.id}\`\n`);
                 })
                     .join('\n');
-                const embed = (0, embed_builder_js_1.createInfoEmbed)('📅 Upcoming Meetings & Live Sessions', listContent + '\n*Run `/meeting book` if you wish to book a 1-on-1 consultation.*');
+                const embed = createInfoEmbed('📅 Upcoming Meetings & Live Sessions', listContent + '\n*Run `/meeting book` if you wish to book a 1-on-1 consultation.*');
                 await interaction.editReply({ embeds: [embed] });
             }
             catch (err) {
                 await interaction.editReply({
-                    embeds: [(0, embed_builder_js_1.createErrorEmbed)('Error', err.message || 'Could not fetch meetings.')],
+                    embeds: [createErrorEmbed('Error', err.message || 'Could not fetch meetings.')],
                 });
             }
         }
         else if (sub === 'cancel') {
-            const isAllowed = await (0, permissions_js_1.requireInstructor)(interaction);
+            const isAllowed = await requireInstructor(interaction);
             if (!isAllowed)
                 return;
-            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            if (!(await safeDeferReply(interaction, true)))
                 return;
             const meetingId = interaction.options.getString('meeting_id', true);
-            const success = await meeting_service_js_1.meetingService.cancelMeeting(meetingId);
+            const success = await meetingService.cancelMeeting(meetingId);
             if (success) {
                 await interaction.editReply({
-                    embeds: [(0, embed_builder_js_1.createSuccessEmbed)('Meeting Cancelled', `Meeting with ID \`${meetingId}\` has been removed.`)],
+                    embeds: [createSuccessEmbed('Meeting Cancelled', `Meeting with ID \`${meetingId}\` has been removed.`)],
                 });
             }
             else {
                 await interaction.editReply({
-                    embeds: [(0, embed_builder_js_1.createWarningEmbed)('Meeting Not Found', `No scheduled meeting found with ID \`${meetingId}\`.`)],
+                    embeds: [createWarningEmbed('Meeting Not Found', `No scheduled meeting found with ID \`${meetingId}\`.`)],
                 });
             }
         }
         else if (sub === 'book') {
-            if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+            if (!(await safeDeferReply(interaction, true)))
                 return;
-            const embed = (0, embed_builder_js_1.createInfoEmbed)('🤝 1-on-1 Meeting & Consultation Booking', 'As an active subscriber, you have direct access to our instructors for personalized reviews and strategy sessions.\n\n' +
+            const embed = createInfoEmbed('🤝 1-on-1 Meeting & Consultation Booking', 'As an active subscriber, you have direct access to our instructors for personalized reviews and strategy sessions.\n\n' +
                 '**How to Book a 1-on-1:**\n' +
                 '1. Check upcoming open slots or reach out to an instructor in the server.\n' +
                 '2. Prepare your questions, campaign drafts, or video scripts in advance.\n' +

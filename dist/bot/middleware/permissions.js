@@ -1,32 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.isStaff = isStaff;
-exports.isAdmin = isAdmin;
-exports.isInstructor = isInstructor;
-exports.isPremium = isPremium;
-exports.requireAdmin = requireAdmin;
-exports.requireInstructor = requireInstructor;
-exports.requirePremium = requirePremium;
-const env_js_1 = require("../../config/env.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-function isStaff(member) {
-    return member.roles.cache.has(env_js_1.env.ROLE_ADMIN) || member.roles.cache.has(env_js_1.env.ROLE_INSTRUCTOR);
+import { env } from '../../config/env.js';
+import { createErrorEmbed } from '../../utils/embed-builder.js';
+export function isStaff(member) {
+    return member.roles.cache.has(env.ROLE_ADMIN) || member.roles.cache.has(env.ROLE_INSTRUCTOR);
 }
-function isAdmin(member) {
-    return member.roles.cache.has(env_js_1.env.ROLE_ADMIN) || member.permissions.has('Administrator');
+export function isAdmin(member) {
+    return member.roles.cache.has(env.ROLE_ADMIN) || member.permissions.has('Administrator');
 }
-function isInstructor(member) {
-    return member.roles.cache.has(env_js_1.env.ROLE_INSTRUCTOR) || isAdmin(member);
+export function isInstructor(member) {
+    return member.roles.cache.has(env.ROLE_INSTRUCTOR) || isAdmin(member);
 }
-function isPremium(member) {
-    return member.roles.cache.has(env_js_1.env.ROLE_PREMIUM) || isAdmin(member);
+export function isPremium(member) {
+    return member.roles.cache.has(env.ROLE_PREMIUM) || isAdmin(member);
 }
-async function requireAdmin(interaction) {
+export async function requireAdmin(interaction) {
     const member = interaction.member;
     if (!member || !isAdmin(member)) {
         if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({
-                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Administrator** role.')],
+                embeds: [createErrorEmbed('Permission Denied', 'This command requires the **Administrator** role.')],
                 ephemeral: true,
             }).catch(() => { });
         }
@@ -34,12 +25,12 @@ async function requireAdmin(interaction) {
     }
     return true;
 }
-async function requireInstructor(interaction) {
+export async function requireInstructor(interaction) {
     const member = interaction.member;
     if (!member || !isInstructor(member)) {
         if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({
-                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Permission Denied', 'This command requires the **Instructor** role.')],
+                embeds: [createErrorEmbed('Permission Denied', 'This command requires the **Instructor** role.')],
                 ephemeral: true,
             }).catch(() => { });
         }
@@ -47,12 +38,12 @@ async function requireInstructor(interaction) {
     }
     return true;
 }
-async function requirePremium(interaction) {
+export async function requirePremium(interaction) {
     const member = interaction.member;
     if (!member || !isPremium(member)) {
         if (!interaction.deferred && !interaction.replied) {
             await interaction.reply({
-                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Premium Required', 'This feature is reserved for active **Premium Academy** subscribers.\nUse `/link` to connect your subscription.')],
+                embeds: [createErrorEmbed('Premium Required', 'This feature is reserved for active **Premium Academy** subscribers.\nUse `/link` to connect your subscription.')],
                 ephemeral: true,
             }).catch(() => { });
         }

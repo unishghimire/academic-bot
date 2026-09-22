@@ -1,16 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.meetingService = exports.MeetingService = void 0;
-const client_js_1 = require("../db/client.js");
-const local_store_js_1 = require("../db/local-store.js");
-const logger_js_1 = require("../utils/logger.js");
-class MeetingService {
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
+import { localStore } from '../db/local-store.js';
+import { logger } from '../utils/logger.js';
+export class MeetingService {
     db;
-    constructor(db = client_js_1.prisma) {
+    constructor(db = defaultPrisma) {
         this.db = db;
     }
     isOffline() {
-        return this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)();
+        return this.db === defaultPrisma && !isPostgresOnline();
     }
     /**
      * Schedule a new meeting/class
@@ -30,8 +27,8 @@ class MeetingService {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
-            local_store_js_1.localStore.saveLiveClass(meeting);
-            logger_js_1.logger.info({ meetingId: meeting.id }, 'Meeting scheduled in local offline storage');
+            localStore.saveLiveClass(meeting);
+            logger.info({ meetingId: meeting.id }, 'Meeting scheduled in local offline storage');
             return meeting;
         }
         try {
@@ -44,11 +41,11 @@ class MeetingService {
                     reminderRole: input.reminderRole ? input.reminderRole.trim() : null,
                 },
             });
-            logger_js_1.logger.info({ meetingId: meeting.id }, 'Meeting scheduled successfully in database');
+            logger.info({ meetingId: meeting.id }, 'Meeting scheduled successfully in database');
             return meeting;
         }
         catch (err) {
-            logger_js_1.logger.warn({ err }, 'Database save failed, using local offline storage for meeting');
+            logger.warn({ err }, 'Database save failed, using local offline storage for meeting');
             const meeting = {
                 id: `meet_${Date.now()}`,
                 title: input.title.trim(),
@@ -59,7 +56,7 @@ class MeetingService {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
-            local_store_js_1.localStore.saveLiveClass(meeting);
+            localStore.saveLiveClass(meeting);
             return meeting;
         }
     }
@@ -69,7 +66,7 @@ class MeetingService {
     async listUpcomingMeetings() {
         const now = new Date();
         if (this.isOffline()) {
-            const all = local_store_js_1.localStore.getLiveClasses();
+            const all = localStore.getLiveClasses();
             return all
                 .filter(m => new Date(m.scheduledAt).getTime() >= now.getTime() - 15 * 60 * 1000) // within 15 min past or in future
                 .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
@@ -83,7 +80,7 @@ class MeetingService {
             });
         }
         catch {
-            const all = local_store_js_1.localStore.getLiveClasses();
+            const all = localStore.getLiveClasses();
             return all
                 .filter(m => new Date(m.scheduledAt).getTime() >= now.getTime() - 15 * 60 * 1000)
                 .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
@@ -94,14 +91,14 @@ class MeetingService {
      */
     async cancelMeeting(id) {
         if (this.isOffline()) {
-            return local_store_js_1.localStore.deleteLiveClass(id);
+            return localStore.deleteLiveClass(id);
         }
         try {
             await this.db.liveClass.delete({ where: { id } });
             return true;
         }
         catch {
-            return local_store_js_1.localStore.deleteLiveClass(id);
+            return localStore.deleteLiveClass(id);
         }
     }
     /**
@@ -109,16 +106,15 @@ class MeetingService {
      */
     async getMeeting(id) {
         if (this.isOffline()) {
-            return local_store_js_1.localStore.findLiveClassById(id);
+            return localStore.findLiveClassById(id);
         }
         try {
             return await this.db.liveClass.findUnique({ where: { id } });
         }
         catch {
-            return local_store_js_1.localStore.findLiveClassById(id);
+            return localStore.findLiveClassById(id);
         }
     }
 }
-exports.MeetingService = MeetingService;
-exports.meetingService = new MeetingService();
+export const meetingService = new MeetingService();
 //# sourceMappingURL=meeting.service.js.map

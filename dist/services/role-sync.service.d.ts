@@ -12,10 +12,12 @@ export declare class RoleSyncService {
     constructor(db?: PrismaClient);
     /**
      * Derives the set of managed Academy role IDs a user should possess based on DB state.
+     * Strictly checks both subscriptionStatus AND subscriptionExpiresAt timestamp.
      */
     computeExpectedRoles(user: {
         subscriptionStatus: SubscriptionStatus;
         currentTier: number;
+        subscriptionExpiresAt?: Date | string | null;
     }): {
         expectedRoleIds: Set<string>;
         prohibitedRoleIds: Set<string>;

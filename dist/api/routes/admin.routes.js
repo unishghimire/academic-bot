@@ -1,26 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createAdminRouter = createAdminRouter;
-const express_1 = require("express");
-const client_js_1 = require("../../db/client.js");
-const local_store_js_1 = require("../../db/local-store.js");
-const env_js_1 = require("../../config/env.js");
-const manual_payment_service_js_1 = require("../../services/manual-payment.service.js");
-const payment_method_service_js_1 = require("../../services/payment-method.service.js");
-const tier_engine_service_js_1 = require("../../services/tier-engine.service.js");
-const role_sync_service_js_1 = require("../../services/role-sync.service.js");
-const error_logger_service_js_1 = require("../../services/error-logger.service.js");
-const payment_verification_sync_service_js_1 = require("../../services/payment-verification-sync.service.js");
-const client_1 = require("@prisma/client");
-function createAdminRouter(discordClient) {
-    const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { prisma, isDatabaseOnline } from '../../db/client.js';
+import { localStore } from '../../db/local-store.js';
+import { env } from '../../config/env.js';
+import { manualPaymentService } from '../../services/manual-payment.service.js';
+import { paymentMethodService } from '../../services/payment-method.service.js';
+import { tierEngine } from '../../services/tier-engine.service.js';
+import { roleSyncService } from '../../services/role-sync.service.js';
+import { errorLogger } from '../../services/error-logger.service.js';
+import { paymentVerificationSyncService } from '../../services/payment-verification-sync.service.js';
+import { ManualPaymentStatus, SubscriptionStatus } from '@prisma/client';
+export function createAdminRouter(discordClient) {
+    const router = Router();
     // Admin authentication middleware
     function requireAdminAuth(req, res, next) {
         const authHeader = req.headers['x-admin-key'];
         const queryKey = req.query.key;
         const token = authHeader || queryKey;
         const cleanToken = (token || '').trim().replace(/^["']|["']$/g, '');
-        const cleanKey = (env_js_1.env.ADMIN_PANEL_KEY || '').trim().replace(/^["']|["']$/g, '');
+        const cleanKey = (env.ADMIN_PANEL_KEY || '').trim().replace(/^["']|["']$/g, '');
         if (!cleanToken || cleanToken !== cleanKey) {
             res.status(401).json({ error: 'Unauthorized: Invalid Admin Panel Access Key' });
             return;
@@ -34,20 +31,20 @@ function createAdminRouter(discordClient) {
     });
     // 1. Dashboard Overview Stats
     router.get('/stats', async (_req, res) => {
-        if (!(0, client_js_1.isDatabaseOnline)()) {
-            const pending = local_store_js_1.localStore.getManualPayments('PENDING');
-            const approved = local_store_js_1.localStore.getManualPayments('APPROVED');
+        if (!isDatabaseOnline()) {
+            const pending = localStore.getManualPayments('PENDING');
+            const approved = localStore.getManualPayments('APPROVED');
             const revenue = approved.reduce((sum, p) => sum + (p.amount || 0), 0);
             res.json({
                 success: true,
                 stats: {
-                    totalUsers: local_store_js_1.localStore.getUsers().length,
-                    activeSubscribers: local_store_js_1.localStore.getUsers().filter(u => u.subscriptionStatus === 'ACTIVE').length,
+                    totalUsers: localStore.getUsers().length,
+                    activeSubscribers: localStore.getUsers().filter(u => u.subscriptionStatus === 'ACTIVE').length,
                     pendingPayments: pending.length,
                     approvedPayments: approved.length,
                     totalManualRevenue: revenue,
                     tierDistribution: { tier1: 0, tier2: 0, tier3: 0, graduates: 0 },
-                    auditLogsCount: local_store_js_1.localStore.getAuditLogs().length,
+                    auditLogsCount: localStore.getAuditLogs().length,
                     botOnline: discordClient?.isReady() ?? false,
                     dbConnected: false,
                     warning: 'PostgreSQL database is currently disconnected. System active in local resilient storage mode.',
@@ -57,18 +54,18 @@ function createAdminRouter(discordClient) {
         }
         try {
             const [totalUsers, activeSubscribers, pendingPayments, approvedPayments, tier1, tier2, tier3, graduates, recentAuditCount,] = await Promise.all([
-                client_js_1.prisma.user.count(),
-                client_js_1.prisma.user.count({ where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE } }),
-                client_js_1.prisma.manualPayment.count({ where: { status: client_1.ManualPaymentStatus.PENDING } }),
-                client_js_1.prisma.manualPayment.count({ where: { status: client_1.ManualPaymentStatus.APPROVED } }),
-                client_js_1.prisma.user.count({ where: { currentTier: 1 } }),
-                client_js_1.prisma.user.count({ where: { currentTier: 2 } }),
-                client_js_1.prisma.user.count({ where: { currentTier: 3 } }),
-                client_js_1.prisma.user.count({ where: { currentTier: 4 } }),
-                client_js_1.prisma.auditLog.count(),
+                prisma.user.count(),
+                prisma.user.count({ where: { subscriptionStatus: SubscriptionStatus.ACTIVE } }),
+                prisma.manualPayment.count({ where: { status: ManualPaymentStatus.PENDING } }),
+                prisma.manualPayment.count({ where: { status: ManualPaymentStatus.APPROVED } }),
+                prisma.user.count({ where: { currentTier: 1 } }),
+                prisma.user.count({ where: { currentTier: 2 } }),
+                prisma.user.count({ where: { currentTier: 3 } }),
+                prisma.user.count({ where: { currentTier: 4 } }),
+                prisma.auditLog.count(),
             ]);
-            const revenueAggregate = await client_js_1.prisma.manualPayment.aggregate({
-                where: { status: client_1.ManualPaymentStatus.APPROVED },
+            const revenueAggregate = await prisma.manualPayment.aggregate({
+                where: { status: ManualPaymentStatus.APPROVED },
                 _sum: { amount: true },
             });
             res.json({
@@ -110,7 +107,7 @@ function createAdminRouter(discordClient) {
         try {
             const status = req.query.status;
             const search = req.query.search;
-            const payments = await manual_payment_service_js_1.manualPaymentService.listPayments({
+            const payments = await manualPaymentService.listPayments({
                 status: status || 'ALL',
                 search,
             });
@@ -125,7 +122,7 @@ function createAdminRouter(discordClient) {
         const paymentId = req.params.id;
         const { adminId, durationDays, tier, notes } = req.body;
         try {
-            const result = await manual_payment_service_js_1.manualPaymentService.approvePayment(paymentId, {
+            const result = await manualPaymentService.approvePayment(paymentId, {
                 adminId: adminId || 'web_admin',
                 durationDays: durationDays ? parseInt(durationDays, 10) : 30,
                 tier: tier ? parseInt(tier, 10) : 1,
@@ -138,7 +135,7 @@ function createAdminRouter(discordClient) {
             });
         }
         catch (error) {
-            await error_logger_service_js_1.errorLogger.report(discordClient ?? null, {
+            await errorLogger.report(discordClient ?? null, {
                 module: 'ADMIN_API',
                 action: 'APPROVE_MANUAL_PAYMENT',
                 error,
@@ -151,7 +148,7 @@ function createAdminRouter(discordClient) {
     router.post('/sync-verifications', async (req, res) => {
         try {
             if (discordClient) {
-                const result = await payment_verification_sync_service_js_1.paymentVerificationSyncService.syncApprovedPayments(discordClient);
+                const result = await paymentVerificationSyncService.syncApprovedPayments(discordClient);
                 res.json({ success: true, result });
             }
             else {
@@ -171,7 +168,7 @@ function createAdminRouter(discordClient) {
             return;
         }
         try {
-            const result = await manual_payment_service_js_1.manualPaymentService.rejectPayment(paymentId, {
+            const result = await manualPaymentService.rejectPayment(paymentId, {
                 adminId: adminId || 'web_admin',
                 reason: reason.trim(),
             });
@@ -190,7 +187,7 @@ function createAdminRouter(discordClient) {
         try {
             const { studentName, phoneNumber, email, discordId, transactionId, amount, paymentMethod, durationDays, tier, notes, adminId, } = req.body;
             // Submit as proof
-            const payment = await manual_payment_service_js_1.manualPaymentService.submitPaymentProof({
+            const payment = await manualPaymentService.submitPaymentProof({
                 studentName,
                 phoneNumber,
                 email,
@@ -201,7 +198,7 @@ function createAdminRouter(discordClient) {
                 notes: notes || 'Direct manual entry by admin',
             }, discordClient);
             // Instantly approve
-            const result = await manual_payment_service_js_1.manualPaymentService.approvePayment(payment.id, {
+            const result = await manualPaymentService.approvePayment(payment.id, {
                 adminId: adminId || 'web_admin',
                 durationDays: durationDays ? parseInt(durationDays, 10) : 30,
                 tier: tier ? parseInt(tier, 10) : 1,
@@ -219,8 +216,8 @@ function createAdminRouter(discordClient) {
     });
     // 6. List Students & Manage Tiers
     router.get('/users', async (req, res) => {
-        if (!(0, client_js_1.isDatabaseOnline)()) {
-            res.json({ success: true, data: local_store_js_1.localStore.getUsers() });
+        if (!isDatabaseOnline()) {
+            res.json({ success: true, data: localStore.getUsers() });
             return;
         }
         try {
@@ -234,7 +231,7 @@ function createAdminRouter(discordClient) {
                     { accountId: { contains: q, mode: 'insensitive' } },
                 ];
             }
-            const users = await client_js_1.prisma.user.findMany({
+            const users = await prisma.user.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
                 take: 100,
@@ -258,9 +255,9 @@ function createAdminRouter(discordClient) {
             return;
         }
         try {
-            await tier_engine_service_js_1.tierEngine.applyAdminOverride(userId, parseInt(tier, 10), adminId || 'web_admin', reason.trim());
+            await tierEngine.applyAdminOverride(userId, parseInt(tier, 10), adminId || 'web_admin', reason.trim());
             if (discordClient) {
-                await role_sync_service_js_1.roleSyncService.syncUserRoles(userId, discordClient);
+                await roleSyncService.syncUserRoles(userId, discordClient);
             }
             res.json({ success: true, message: `User tier updated to Tier ${tier} and roles synced.` });
         }
@@ -271,12 +268,12 @@ function createAdminRouter(discordClient) {
     // 8. View Audit Logs
     router.get('/audit-logs', async (req, res) => {
         const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
-        if (!(0, client_js_1.isDatabaseOnline)()) {
-            res.json({ success: true, data: local_store_js_1.localStore.getAuditLogs(limit) });
+        if (!isDatabaseOnline()) {
+            res.json({ success: true, data: localStore.getAuditLogs(limit) });
             return;
         }
         try {
-            const logs = await client_js_1.prisma.auditLog.findMany({
+            const logs = await prisma.auditLog.findMany({
                 orderBy: { createdAt: 'desc' },
                 take: limit,
             });
@@ -289,7 +286,7 @@ function createAdminRouter(discordClient) {
     // 9. Payment Methods Management (Admin QR Uploads & Settings)
     router.get('/payment-methods', async (_req, res) => {
         try {
-            const methods = await payment_method_service_js_1.paymentMethodService.listAllMethods();
+            const methods = await paymentMethodService.listAllMethods();
             res.json({ success: true, data: methods });
         }
         catch (error) {
@@ -299,7 +296,7 @@ function createAdminRouter(discordClient) {
     router.post('/payment-methods', async (req, res) => {
         try {
             const { title, accountName, accountNumber, qrCodeUrl, instructions, active, adminId } = req.body;
-            const created = await payment_method_service_js_1.paymentMethodService.createMethod({
+            const created = await paymentMethodService.createMethod({
                 title,
                 accountName,
                 accountNumber,
@@ -322,7 +319,7 @@ function createAdminRouter(discordClient) {
         try {
             const id = req.params.id;
             const { title, accountName, accountNumber, qrCodeUrl, instructions, active, orderIndex, adminId } = req.body;
-            const updated = await payment_method_service_js_1.paymentMethodService.updateMethod(id, {
+            const updated = await paymentMethodService.updateMethod(id, {
                 title,
                 accountName,
                 accountNumber,
@@ -346,7 +343,7 @@ function createAdminRouter(discordClient) {
         try {
             const id = req.params.id;
             const adminId = req.body?.adminId || 'admin';
-            const toggled = await payment_method_service_js_1.paymentMethodService.toggleStatus(id, adminId);
+            const toggled = await paymentMethodService.toggleStatus(id, adminId);
             res.json({
                 success: true,
                 message: `Payment method ${toggled.active ? 'activated' : 'deactivated'}`,
@@ -361,7 +358,7 @@ function createAdminRouter(discordClient) {
         try {
             const id = req.params.id;
             const adminId = req.query?.adminId || 'admin';
-            const deleted = await payment_method_service_js_1.paymentMethodService.deleteMethod(id, adminId);
+            const deleted = await paymentMethodService.deleteMethod(id, adminId);
             res.json({
                 success: true,
                 message: 'Payment method deleted successfully',

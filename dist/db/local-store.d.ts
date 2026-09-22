@@ -30,4 +30,8 @@ export declare const localStore: {
     saveLinkingCode(linkingCode: LocalLinkingCode): LocalLinkingCode;
     findLinkingCode(code: string): LocalLinkingCode | null;
     markLinkingCodeUsed(code: string): boolean;
+    hasWarningBeenSent(userId: string, expiresAt: Date | string): boolean;
+    markWarningSent(userId: string, expiresAt: Date | string): void;
+    hasExpiredNoticeBeenSent(userId: string, expiresAt?: Date | string | null): boolean;
+    markExpiredNoticeSent(userId: string, expiresAt?: Date | string | null): void;
 };

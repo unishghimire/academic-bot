@@ -1,26 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentMethodService = exports.PaymentMethodService = void 0;
-const client_1 = require("@prisma/client");
-const client_js_1 = require("../db/client.js");
-const audit_service_js_1 = require("./audit.service.js");
-const local_store_js_1 = require("../db/local-store.js");
-class PaymentMethodService {
+import { ActorType } from '@prisma/client';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
+import { auditService as defaultAuditService } from './audit.service.js';
+import { localStore } from '../db/local-store.js';
+export class PaymentMethodService {
     db;
     auditor;
-    constructor(db = client_js_1.prisma, auditor = audit_service_js_1.auditService) {
+    constructor(db = defaultPrisma, auditor = defaultAuditService) {
         this.db = db;
         this.auditor = auditor;
     }
     isOffline() {
-        return this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)();
+        return this.db === defaultPrisma && !isPostgresOnline();
     }
     /**
      * List all active payment methods for student checkout / proof submission
      */
     async listActiveMethods() {
         if (this.isOffline()) {
-            return local_store_js_1.localStore.getPaymentMethods(true);
+            return localStore.getPaymentMethods(true);
         }
         try {
             return await this.db.paymentMethod.findMany({
@@ -29,7 +26,7 @@ class PaymentMethodService {
             });
         }
         catch {
-            return local_store_js_1.localStore.getPaymentMethods(true);
+            return localStore.getPaymentMethods(true);
         }
     }
     /**
@@ -37,7 +34,7 @@ class PaymentMethodService {
      */
     async listAllMethods() {
         if (this.isOffline()) {
-            return local_store_js_1.localStore.getPaymentMethods(false);
+            return localStore.getPaymentMethods(false);
         }
         try {
             return await this.db.paymentMethod.findMany({
@@ -45,7 +42,7 @@ class PaymentMethodService {
             });
         }
         catch {
-            return local_store_js_1.localStore.getPaymentMethods(false);
+            return localStore.getPaymentMethods(false);
         }
     }
     /**
@@ -53,7 +50,7 @@ class PaymentMethodService {
      */
     async getMethodById(id) {
         if (this.isOffline()) {
-            const all = local_store_js_1.localStore.getPaymentMethods(false);
+            const all = localStore.getPaymentMethods(false);
             return all.find(m => m.id === id) || null;
         }
         try {
@@ -62,7 +59,7 @@ class PaymentMethodService {
             });
         }
         catch {
-            const all = local_store_js_1.localStore.getPaymentMethods(false);
+            const all = localStore.getPaymentMethods(false);
             return all.find(m => m.id === id) || null;
         }
     }
@@ -90,7 +87,7 @@ class PaymentMethodService {
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
-            local_store_js_1.localStore.savePaymentMethod(method);
+            localStore.savePaymentMethod(method);
         }
         else {
             try {
@@ -119,11 +116,11 @@ class PaymentMethodService {
                     createdAt: new Date(),
                     updatedAt: new Date(),
                 };
-                local_store_js_1.localStore.savePaymentMethod(method);
+                localStore.savePaymentMethod(method);
             }
         }
         await this.auditor.log({
-            actorType: client_1.ActorType.ADMIN,
+            actorType: ActorType.ADMIN,
             action: 'PAYMENT_METHOD_CREATED',
             actorId: input.adminId || 'admin',
             targetType: 'PAYMENT_METHOD',
@@ -141,7 +138,7 @@ class PaymentMethodService {
      */
     async updateMethod(id, input) {
         if (this.isOffline()) {
-            const all = local_store_js_1.localStore.getPaymentMethods(false);
+            const all = localStore.getPaymentMethods(false);
             const existing = all.find(m => m.id === id);
             if (!existing) {
                 throw new Error(`Payment method with ID ${id} not found`);
@@ -159,7 +156,7 @@ class PaymentMethodService {
             if (input.active !== undefined)
                 existing.active = input.active;
             existing.updatedAt = new Date();
-            return local_store_js_1.localStore.savePaymentMethod(existing);
+            return localStore.savePaymentMethod(existing);
         }
         try {
             const existing = await this.db.paymentMethod.findUnique({ where: { id } });
@@ -181,7 +178,7 @@ class PaymentMethodService {
             return updated;
         }
         catch {
-            const all = local_store_js_1.localStore.getPaymentMethods(false);
+            const all = localStore.getPaymentMethods(false);
             const existing = all.find(m => m.id === id);
             if (!existing) {
                 throw new Error(`Payment method with ID ${id} not found`);
@@ -199,7 +196,7 @@ class PaymentMethodService {
             if (input.active !== undefined)
                 existing.active = input.active;
             existing.updatedAt = new Date();
-            return local_store_js_1.localStore.savePaymentMethod(existing);
+            return localStore.savePaymentMethod(existing);
         }
     }
     /**
@@ -208,14 +205,14 @@ class PaymentMethodService {
     async toggleStatus(id, adminId) {
         let updated;
         if (this.isOffline()) {
-            const all = local_store_js_1.localStore.getPaymentMethods(false);
+            const all = localStore.getPaymentMethods(false);
             const existing = all.find(m => m.id === id);
             if (!existing) {
                 throw new Error(`Payment method with ID ${id} not found`);
             }
             existing.active = !existing.active;
             existing.updatedAt = new Date();
-            updated = local_store_js_1.localStore.savePaymentMethod(existing);
+            updated = localStore.savePaymentMethod(existing);
         }
         else {
             try {
@@ -229,18 +226,18 @@ class PaymentMethodService {
                 });
             }
             catch {
-                const all = local_store_js_1.localStore.getPaymentMethods(false);
+                const all = localStore.getPaymentMethods(false);
                 const existing = all.find(m => m.id === id);
                 if (!existing) {
                     throw new Error(`Payment method with ID ${id} not found`);
                 }
                 existing.active = !existing.active;
                 existing.updatedAt = new Date();
-                updated = local_store_js_1.localStore.savePaymentMethod(existing);
+                updated = localStore.savePaymentMethod(existing);
             }
         }
         await this.auditor.log({
-            actorType: client_1.ActorType.ADMIN,
+            actorType: ActorType.ADMIN,
             action: 'PAYMENT_METHOD_TOGGLED',
             actorId: adminId || 'admin',
             targetType: 'PAYMENT_METHOD',
@@ -255,7 +252,7 @@ class PaymentMethodService {
     async deleteMethod(id, adminId) {
         let deleted = null;
         if (this.isOffline()) {
-            deleted = local_store_js_1.localStore.deletePaymentMethod(id);
+            deleted = localStore.deletePaymentMethod(id);
             if (!deleted) {
                 throw new Error(`Payment method with ID ${id} not found`);
             }
@@ -271,14 +268,14 @@ class PaymentMethodService {
                 });
             }
             catch {
-                deleted = local_store_js_1.localStore.deletePaymentMethod(id);
+                deleted = localStore.deletePaymentMethod(id);
                 if (!deleted) {
                     throw new Error(`Payment method with ID ${id} not found`);
                 }
             }
         }
         await this.auditor.log({
-            actorType: client_1.ActorType.ADMIN,
+            actorType: ActorType.ADMIN,
             action: 'PAYMENT_METHOD_DELETED',
             actorId: adminId || 'admin',
             targetType: 'PAYMENT_METHOD',
@@ -288,6 +285,5 @@ class PaymentMethodService {
         return deleted;
     }
 }
-exports.PaymentMethodService = PaymentMethodService;
-exports.paymentMethodService = new PaymentMethodService();
+export const paymentMethodService = new PaymentMethodService();
 //# sourceMappingURL=payment-method.service.js.map

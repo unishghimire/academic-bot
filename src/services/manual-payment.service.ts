@@ -3,7 +3,7 @@ import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
 import { auditService, AuditService } from './audit.service.js';
 import { roleSyncService, RoleSyncService } from './role-sync.service.js';
 import { logger } from '../utils/logger.js';
-import { Client, TextChannel, EmbedBuilder } from 'discord.js';
+import { Client, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { COLORS, EMBED_FOOTER } from '../config/constants.js';
 import { env } from '../config/env.js';
 import { localStore } from '../db/local-store.js';
@@ -340,6 +340,17 @@ export class ManualPaymentService {
 
       if (discordClient && targetUser.discordId) {
         await this.roleSync.syncUserRoles(targetUser.id, discordClient).catch(() => null);
+        await this.sendWelcomeApprovalDM(
+          discordClient,
+          targetUser.discordId,
+          payment.studentName,
+          payment.amount,
+          payment.currency || 'USD',
+          payment.transactionId,
+          durationDays,
+          tier,
+          expiresAt
+        ).catch(() => null);
       }
 
       return { payment: updatedPayment, user: targetUser };
@@ -453,27 +464,17 @@ export class ManualPaymentService {
         });
 
         // Send confirmation DM to student
-        try {
-          const discordUser = await discordClient.users.fetch(targetUser.discordId).catch(() => null);
-          if (discordUser) {
-            const embed = new EmbedBuilder()
-              .setTitle('🎉 Payment Verified & Access Activated!')
-              .setColor(COLORS.SUCCESS)
-              .setDescription(
-                `Hello **${payment.studentName}**, your payment proof of **$${payment.amount.toFixed(2)}** (Tx: \`${payment.transactionId}\`) has been **approved** by staff!\n\n` +
-                `• **Membership:** Premium Active (${durationDays} days)\n` +
-                `• **Tier Access:** Tier ${tier}\n` +
-                `• **Expires:** <t:${Math.floor(expiresAt.getTime() / 1000)}:F>\n\n` +
-                `Your Discord roles have been synchronized automatically. Use \`/subscription\` or \`/continue\` to begin learning!`
-              )
-              .setFooter(EMBED_FOOTER)
-              .setTimestamp();
-
-            await discordUser.send({ embeds: [embed] }).catch(() => {});
-          }
-        } catch {
-          // Ignore DM failure
-        }
+        await this.sendWelcomeApprovalDM(
+          discordClient,
+          targetUser.discordId,
+          payment.studentName,
+          payment.amount,
+          payment.currency || 'USD',
+          payment.transactionId,
+          durationDays,
+          tier,
+          expiresAt
+        ).catch(() => null);
       }
 
       return {
@@ -548,6 +549,52 @@ export class ManualPaymentService {
 
     logger.info({ paymentId, admin: params.adminId }, 'Manual payment proof rejected');
     return updated;
+  }
+
+  /**
+   * Dispatches a rich welcome DM with interactive Student Portal button upon payment approval
+   */
+  async sendWelcomeApprovalDM(
+    discordClient: Client,
+    discordId: string,
+    studentName: string,
+    amount: number,
+    currency: string,
+    txId: string,
+    durationDays: number,
+    tier: number,
+    expiresAt: Date
+  ): Promise<void> {
+    try {
+      const discordUser = await discordClient.users.fetch(discordId).catch(() => null);
+      if (!discordUser) return;
+
+      const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('⚡ Open Student Portal')
+          .setStyle(ButtonStyle.Link)
+          .setURL(portalUrl)
+      );
+
+      const embed = new EmbedBuilder()
+        .setTitle('🎉 Payment Verified & Access Activated!')
+        .setColor(COLORS.SUCCESS)
+        .setDescription(
+          `Hello **${studentName}**, your payment proof of **$${amount.toFixed(2)} ${currency}** (Tx: \`${txId}\`) has been **approved** by staff!\n\n` +
+          `• **Membership:** Premium Active (${durationDays} days)\n` +
+          `• **Tier Access:** **Tier ${tier}**\n` +
+          `• **Expires:** <t:${Math.floor(expiresAt.getTime() / 1000)}:F> (<t:${Math.floor(expiresAt.getTime() / 1000)}:R>)\n\n` +
+          `Your Discord roles have been synchronized automatically. Use \`/subscription\` or \`/continue\` to begin learning!`
+        )
+        .setFooter(EMBED_FOOTER)
+        .setTimestamp();
+
+      await discordUser.send({ embeds: [embed], components: [row] }).catch(() => {});
+      logger.info({ discordId }, 'Delivered welcome payment approval DM to student');
+    } catch (err) {
+      logger.debug({ err, discordId }, 'Could not deliver welcome approval DM');
+    }
   }
 }
 

@@ -1,27 +1,24 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetProgressCommand = exports.serverStatsCommand = exports.broadcastCommand = exports.addXpCommand = exports.unlockTierCommand = exports.revokePremiumCommand = exports.grantPremiumCommand = exports.adminDashboardCommand = void 0;
-const discord_js_1 = require("discord.js");
-const client_js_1 = require("../../db/client.js");
-const supabase_js_1 = require("../../db/supabase.js");
-const permissions_js_1 = require("../middleware/permissions.js");
-const audit_service_js_1 = require("../../services/audit.service.js");
-const xp_service_js_1 = require("../../services/xp.service.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-const client_1 = require("@prisma/client");
-const local_store_js_1 = require("../../db/local-store.js");
-const env_js_1 = require("../../config/env.js");
-const logger_js_1 = require("../../utils/logger.js");
-const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
-exports.adminDashboardCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder } from 'discord.js';
+import { prisma, isPostgresOnline } from '../../db/client.js';
+import { getSupabaseClient } from '../../db/supabase.js';
+import { requireAdmin } from '../middleware/permissions.js';
+import { auditService } from '../../services/audit.service.js';
+import { xpService } from '../../services/xp.service.js';
+import { createSuccessEmbed, createWarningEmbed, createInfoEmbed } from '../../utils/embed-builder.js';
+import { SubscriptionStatus } from '@prisma/client';
+import { localStore } from '../../db/local-store.js';
+import { env } from '../../config/env.js';
+import { logger } from '../../utils/logger.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
+export const adminDashboardCommand = {
+    data: new SlashCommandBuilder()
         .setName('admin-dashboard')
         .setDescription('Display high-level Academy operations and user counts'),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         let totalUsers = 0;
         let activeSubscribers = 0;
@@ -30,24 +27,24 @@ exports.adminDashboardCommand = {
         let tier3Count = 0;
         let graduateCount = 0;
         let pendingTickets = 0;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                totalUsers = await client_js_1.prisma.user.count();
-                activeSubscribers = await client_js_1.prisma.user.count({
-                    where: { subscriptionStatus: client_1.SubscriptionStatus.ACTIVE },
+                totalUsers = await prisma.user.count();
+                activeSubscribers = await prisma.user.count({
+                    where: { subscriptionStatus: SubscriptionStatus.ACTIVE },
                 });
-                tier1Count = await client_js_1.prisma.user.count({ where: { currentTier: 1 } });
-                tier2Count = await client_js_1.prisma.user.count({ where: { currentTier: 2 } });
-                tier3Count = await client_js_1.prisma.user.count({ where: { currentTier: 3 } });
-                graduateCount = await client_js_1.prisma.user.count({ where: { currentTier: 4 } });
-                pendingTickets = await client_js_1.prisma.ticket.count({ where: { status: 'OPEN' } });
+                tier1Count = await prisma.user.count({ where: { currentTier: 1 } });
+                tier2Count = await prisma.user.count({ where: { currentTier: 2 } });
+                tier3Count = await prisma.user.count({ where: { currentTier: 3 } });
+                graduateCount = await prisma.user.count({ where: { currentTier: 4 } });
+                pendingTickets = await prisma.ticket.count({ where: { status: 'OPEN' } });
             }
             catch {
                 // Fallback below
             }
         }
         else {
-            const supabase = (0, supabase_js_1.getSupabaseClient)();
+            const supabase = getSupabaseClient();
             if (supabase) {
                 try {
                     const { count } = await supabase
@@ -61,7 +58,7 @@ exports.adminDashboardCommand = {
                     // Ignore
                 }
             }
-            const users = local_store_js_1.localStore.getUsers();
+            const users = localStore.getUsers();
             if (users.length > totalUsers)
                 totalUsers = users.length;
             tier1Count = users.filter(u => u.currentTier === 1).length;
@@ -70,7 +67,7 @@ exports.adminDashboardCommand = {
             graduateCount = users.filter(u => u.currentTier === 4).length;
             pendingTickets = 0;
         }
-        const embed = (0, embed_builder_js_1.createInfoEmbed)('⚙️ Academy Admin Operations Dashboard', `**Total Registered Students:** **${totalUsers}**\n` +
+        const embed = createInfoEmbed('⚙️ Academy Admin Operations Dashboard', `**Total Registered Students:** **${totalUsers}**\n` +
             `**Active Paid Subscribers:** **${activeSubscribers}**\n` +
             `**Open Support Tickets:** **${pendingTickets}**\n\n` +
             `**Student Tier Distribution:**\n` +
@@ -82,42 +79,42 @@ exports.adminDashboardCommand = {
         await interaction.editReply({ embeds: [embed] });
     },
 };
-exports.grantPremiumCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const grantPremiumCommand = {
+    data: new SlashCommandBuilder()
         .setName('grant-premium')
         .setDescription('Manually grant premium access to a student')
         .addUserOption(opt => opt.setName('student').setDescription('Target user').setRequired(true))
         .addIntegerOption(opt => opt.setName('days').setDescription('Duration in days').setRequired(true))
         .addStringOption(opt => opt.setName('reason').setDescription('Mandatory administrative reason').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const target = interaction.options.getUser('student', true);
         const days = interaction.options.getInteger('days', true);
         const reason = interaction.options.getString('reason', true);
         const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({ where: { discordId: target.id } });
+                user = await prisma.user.findUnique({ where: { discordId: target.id } });
                 if (!user) {
-                    user = await client_js_1.prisma.user.create({
+                    user = await prisma.user.create({
                         data: {
                             discordId: target.id,
                             accountId: `manual_${target.id}`,
                             email: `${target.username}@discord.local`,
-                            subscriptionStatus: client_1.SubscriptionStatus.ACTIVE,
+                            subscriptionStatus: SubscriptionStatus.ACTIVE,
                             currentTier: 1,
                         },
                     });
                 }
-                await client_js_1.prisma.user.update({
+                await prisma.user.update({
                     where: { id: user.id },
                     data: {
-                        subscriptionStatus: client_1.SubscriptionStatus.ACTIVE,
+                        subscriptionStatus: SubscriptionStatus.ACTIVE,
                         subscriptionExpiresAt: expiresAt,
                     },
                 });
@@ -127,19 +124,19 @@ exports.grantPremiumCommand = {
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(target.id) || {
+            user = localStore.findUserByDiscordId(target.id) || {
                 id: `usr_${target.id}`,
                 discordId: target.id,
                 accountId: `manual_${target.id}`,
                 email: `${target.username}@discord.local`,
             };
-            user.subscriptionStatus = client_1.SubscriptionStatus.ACTIVE;
+            user.subscriptionStatus = SubscriptionStatus.ACTIVE;
             user.currentTier = user.currentTier || 1;
             user.subscriptionExpiresAt = expiresAt;
-            local_store_js_1.localStore.saveUser(user);
+            localStore.saveUser(user);
         }
         // Sync to Supabase if connected
-        const supabase = (0, supabase_js_1.getSupabaseClient)();
+        const supabase = getSupabaseClient();
         if (supabase) {
             try {
                 await supabase.from('payment_verifications').upsert({
@@ -157,57 +154,57 @@ exports.grantPremiumCommand = {
                 }, { onConflict: 'discord_id' });
             }
             catch (err) {
-                logger_js_1.logger.warn({ err }, 'Could not upsert into Supabase for admin grant');
+                logger.warn({ err }, 'Could not upsert into Supabase for admin grant');
             }
         }
         // Grant Discord roles directly
         if (interaction.guild) {
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (member) {
-                if (env_js_1.env.ROLE_PREMIUM)
-                    await member.roles.add(env_js_1.env.ROLE_PREMIUM).catch(() => { });
-                if (env_js_1.env.ROLE_TIER_1)
-                    await member.roles.add(env_js_1.env.ROLE_TIER_1).catch(() => { });
+                if (env.ROLE_PREMIUM)
+                    await member.roles.add(env.ROLE_PREMIUM).catch(() => { });
+                if (env.ROLE_TIER_1)
+                    await member.roles.add(env.ROLE_TIER_1).catch(() => { });
             }
         }
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'ADMIN',
             actorId: interaction.user.id,
             action: 'ADMIN_GRANT_PREMIUM',
             targetType: 'USER',
             targetId: user.id,
             reason,
-            after: { status: client_1.SubscriptionStatus.ACTIVE, expiresAt },
+            after: { status: SubscriptionStatus.ACTIVE, expiresAt },
         });
         await interaction.editReply({
             embeds: [
-                (0, embed_builder_js_1.createSuccessEmbed)('Premium Access Granted', `Granted ${days} day(s) of Premium access to <@${target.id}>.\nReason: *${reason}*`),
+                createSuccessEmbed('Premium Access Granted', `Granted ${days} day(s) of Premium access to <@${target.id}>.\nReason: *${reason}*`),
             ],
         });
     },
 };
-exports.revokePremiumCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const revokePremiumCommand = {
+    data: new SlashCommandBuilder()
         .setName('revoke-premium')
         .setDescription('Revoke premium subscription for a student')
         .addUserOption(opt => opt.setName('student').setDescription('Target user').setRequired(true))
         .addStringOption(opt => opt.setName('reason').setDescription('Mandatory administrative reason').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const target = interaction.options.getUser('student', true);
         const reason = interaction.options.getString('reason', true);
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({ where: { discordId: target.id } });
+                user = await prisma.user.findUnique({ where: { discordId: target.id } });
                 if (user) {
-                    await client_js_1.prisma.user.update({
+                    await prisma.user.update({
                         where: { id: user.id },
-                        data: { subscriptionStatus: client_1.SubscriptionStatus.SUSPENDED },
+                        data: { subscriptionStatus: SubscriptionStatus.SUSPENDED },
                     });
                 }
             }
@@ -216,14 +213,14 @@ exports.revokePremiumCommand = {
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(target.id);
+            user = localStore.findUserByDiscordId(target.id);
         }
         if (user) {
-            user.subscriptionStatus = client_1.SubscriptionStatus.SUSPENDED;
-            local_store_js_1.localStore.saveUser(user);
+            user.subscriptionStatus = SubscriptionStatus.SUSPENDED;
+            localStore.saveUser(user);
         }
         // Update Supabase if connected
-        const supabase = (0, supabase_js_1.getSupabaseClient)();
+        const supabase = getSupabaseClient();
         if (supabase) {
             try {
                 await supabase
@@ -232,7 +229,7 @@ exports.revokePremiumCommand = {
                     .or(`discord_id.eq.${target.id},discord_username.ilike.%${target.username}%`);
             }
             catch (err) {
-                logger_js_1.logger.warn({ err }, 'Could not update Supabase for admin revoke');
+                logger.warn({ err }, 'Could not update Supabase for admin revoke');
             }
         }
         // Strip roles immediately from Discord member
@@ -240,11 +237,11 @@ exports.revokePremiumCommand = {
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (member) {
                 const rolesToRemove = [
-                    env_js_1.env.ROLE_PREMIUM,
-                    env_js_1.env.ROLE_TIER_1,
-                    env_js_1.env.ROLE_TIER_2,
-                    env_js_1.env.ROLE_TIER_3,
-                    env_js_1.env.ROLE_GRADUATE,
+                    env.ROLE_PREMIUM,
+                    env.ROLE_TIER_1,
+                    env.ROLE_TIER_2,
+                    env.ROLE_TIER_3,
+                    env.ROLE_GRADUATE,
                 ].filter(Boolean);
                 for (const r of rolesToRemove) {
                     if (member.roles.cache.has(r)) {
@@ -253,24 +250,24 @@ exports.revokePremiumCommand = {
                 }
             }
         }
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'ADMIN',
             actorId: interaction.user.id,
             action: 'ADMIN_REVOKE_PREMIUM',
             targetType: 'USER',
             targetId: user?.id || target.id,
             reason,
-            after: { status: client_1.SubscriptionStatus.SUSPENDED },
+            after: { status: SubscriptionStatus.SUSPENDED },
         });
         await interaction.editReply({
             embeds: [
-                (0, embed_builder_js_1.createSuccessEmbed)('Premium Revoked', `Revoked Premium access for <@${target.id}>.\nReason: *${reason}*`),
+                createSuccessEmbed('Premium Revoked', `Revoked Premium access for <@${target.id}>.\nReason: *${reason}*`),
             ],
         });
     },
 };
-exports.unlockTierCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const unlockTierCommand = {
+    data: new SlashCommandBuilder()
         .setName('unlock-tier')
         .setDescription('Admin override to set a student tier level (strictly audited)')
         .addUserOption(opt => opt.setName('student').setDescription('Target user').setRequired(true))
@@ -281,28 +278,28 @@ exports.unlockTierCommand = {
         .addChoices({ name: 'Tier 1', value: 1 }, { name: 'Tier 2', value: 2 }, { name: 'Tier 3', value: 3 }, { name: 'Graduate', value: 4 }))
         .addStringOption(opt => opt.setName('reason').setDescription('Mandatory administrative reason').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const target = interaction.options.getUser('student', true);
         const targetTier = interaction.options.getInteger('tier', true);
         const reason = interaction.options.getString('reason', true);
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({ where: { discordId: target.id } });
+                user = await prisma.user.findUnique({ where: { discordId: target.id } });
             }
             catch {
                 // Fallback below
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(target.id);
+            user = localStore.findUserByDiscordId(target.id);
         }
         if (!user) {
-            user = local_store_js_1.localStore.saveUser({
+            user = localStore.saveUser({
                 id: `usr_${target.id}`,
                 discordId: target.id,
                 currentTier: targetTier,
@@ -310,62 +307,62 @@ exports.unlockTierCommand = {
         }
         else {
             user.currentTier = targetTier;
-            local_store_js_1.localStore.saveUser(user);
+            localStore.saveUser(user);
         }
         // Direct role assignment
         if (interaction.guild) {
             const member = await interaction.guild.members.fetch(target.id).catch(() => null);
             if (member) {
-                const tierRoleId = targetTier === 1 ? env_js_1.env.ROLE_TIER_1 : targetTier === 2 ? env_js_1.env.ROLE_TIER_2 : env_js_1.env.ROLE_TIER_3;
+                const tierRoleId = targetTier === 1 ? env.ROLE_TIER_1 : targetTier === 2 ? env.ROLE_TIER_2 : env.ROLE_TIER_3;
                 if (tierRoleId)
                     await member.roles.add(tierRoleId).catch(() => { });
             }
         }
         await interaction.editReply({
             embeds: [
-                (0, embed_builder_js_1.createSuccessEmbed)('Tier Override Applied', `Student <@${target.id}> advanced to **Tier ${targetTier}**.\nReason: *${reason}*`),
+                createSuccessEmbed('Tier Override Applied', `Student <@${target.id}> advanced to **Tier ${targetTier}**.\nReason: *${reason}*`),
             ],
         });
     },
 };
-exports.addXpCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const addXpCommand = {
+    data: new SlashCommandBuilder()
         .setName('add-xp')
         .setDescription('Grant bonus XP to a student (appends to XP ledger)')
         .addUserOption(opt => opt.setName('student').setDescription('Target user').setRequired(true))
         .addIntegerOption(opt => opt.setName('amount').setDescription('Amount of XP').setRequired(true))
         .addStringOption(opt => opt.setName('reason').setDescription('Mandatory reason').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const target = interaction.options.getUser('student', true);
         const amount = interaction.options.getInteger('amount', true);
         const reason = interaction.options.getString('reason', true);
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({ where: { discordId: target.id } });
+                user = await prisma.user.findUnique({ where: { discordId: target.id } });
             }
             catch {
                 // Fallback
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(target.id);
+            user = localStore.findUserByDiscordId(target.id);
         }
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Found', 'User has not linked an account.')],
+                embeds: [createWarningEmbed('Not Found', 'User has not linked an account.')],
             });
             return;
         }
-        const newTotal = (0, client_js_1.isPostgresOnline)()
-            ? await xp_service_js_1.xpService.awardXp(user.id, amount, `Admin Grant: ${reason}`, 'admin_grant', interaction.user.id)
+        const newTotal = isPostgresOnline()
+            ? await xpService.awardXp(user.id, amount, `Admin Grant: ${reason}`, 'admin_grant', interaction.user.id)
             : amount;
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'ADMIN',
             actorId: interaction.user.id,
             action: 'ADMIN_ADD_XP',
@@ -376,30 +373,30 @@ exports.addXpCommand = {
         });
         await interaction.editReply({
             embeds: [
-                (0, embed_builder_js_1.createSuccessEmbed)('XP Awarded', `Added **+${amount} XP** to <@${target.id}>.\nReason: *${reason}*`),
+                createSuccessEmbed('XP Awarded', `Added **+${amount} XP** to <@${target.id}>.\nReason: *${reason}*`),
             ],
         });
     },
 };
-exports.broadcastCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const broadcastCommand = {
+    data: new SlashCommandBuilder()
         .setName('broadcast')
         .setDescription('Broadcast an official Academy announcement')
         .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
         .addStringOption(opt => opt.setName('message').setDescription('Message text').setRequired(true))
         .addStringOption(opt => opt.setName('reason').setDescription('Reason for broadcast').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const channel = interaction.options.getChannel('channel', true);
         const message = interaction.options.getString('message', true);
         const reason = interaction.options.getString('reason', true);
-        const embed = (0, embed_builder_js_1.createInfoEmbed)('📢 Academy Official Announcement', message);
+        const embed = createInfoEmbed('📢 Academy Official Announcement', message);
         await channel.send({ embeds: [embed] });
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'ADMIN',
             actorId: interaction.user.id,
             action: 'ADMIN_BROADCAST',
@@ -409,19 +406,19 @@ exports.broadcastCommand = {
             after: { message },
         });
         await interaction.editReply({
-            embeds: [(0, embed_builder_js_1.createSuccessEmbed)('Broadcast Dispatched', `Announcement posted to <#${channel.id}>.`)],
+            embeds: [createSuccessEmbed('Broadcast Dispatched', `Announcement posted to <#${channel.id}>.`)],
         });
     },
 };
-exports.serverStatsCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const serverStatsCommand = {
+    data: new SlashCommandBuilder()
         .setName('server-stats')
         .setDescription('View server role counts and sync health'),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const guild = interaction.guild;
         if (!guild) {
@@ -429,42 +426,42 @@ exports.serverStatsCommand = {
             return;
         }
         const totalMembers = guild.memberCount;
-        let totalAuditEntries = local_store_js_1.localStore.getAuditLogs(100).length;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        let totalAuditEntries = localStore.getAuditLogs(100).length;
+        if (isPostgresOnline()) {
             try {
-                totalAuditEntries = await client_js_1.prisma.auditLog.count();
+                totalAuditEntries = await prisma.auditLog.count();
             }
             catch {
                 // Fallback
             }
         }
-        const embed = (0, embed_builder_js_1.createInfoEmbed)('📊 Server & Audit Health', `**Total Discord Members:** ${totalMembers}\n` +
+        const embed = createInfoEmbed('📊 Server & Audit Health', `**Total Discord Members:** ${totalMembers}\n` +
             `**Total Audit Entries:** ${totalAuditEntries}\n` +
             `**Database Single Source of Truth:** Connected (Supabase Cloud)`);
         await interaction.editReply({ embeds: [embed] });
     },
 };
-exports.resetProgressCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const resetProgressCommand = {
+    data: new SlashCommandBuilder()
         .setName('reset-progress')
         .setDescription('Reset lesson progress for a student (audited)')
         .addUserOption(opt => opt.setName('student').setDescription('Target student').setRequired(true))
         .addStringOption(opt => opt.setName('reason').setDescription('Mandatory administrative reason').setRequired(true)),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         const target = interaction.options.getUser('student', true);
         const reason = interaction.options.getString('reason', true);
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({ where: { discordId: target.id } });
+                user = await prisma.user.findUnique({ where: { discordId: target.id } });
                 if (user) {
-                    await client_js_1.prisma.lessonProgress.deleteMany({ where: { userId: user.id } });
-                    await client_js_1.prisma.user.update({ where: { id: user.id }, data: { currentTier: 1 } });
+                    await prisma.lessonProgress.deleteMany({ where: { userId: user.id } });
+                    await prisma.user.update({ where: { id: user.id }, data: { currentTier: 1 } });
                 }
             }
             catch {
@@ -472,13 +469,13 @@ exports.resetProgressCommand = {
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(target.id);
+            user = localStore.findUserByDiscordId(target.id);
         }
         if (user) {
             user.currentTier = 1;
-            local_store_js_1.localStore.saveUser(user);
+            localStore.saveUser(user);
         }
-        await audit_service_js_1.auditService.log({
+        await auditService.log({
             actorType: 'ADMIN',
             actorId: interaction.user.id,
             action: 'ADMIN_RESET_PROGRESS',
@@ -489,7 +486,7 @@ exports.resetProgressCommand = {
         });
         await interaction.editReply({
             embeds: [
-                (0, embed_builder_js_1.createSuccessEmbed)('Progress Reset Completed', `Reset progress for <@${target.id}> to Tier 1.\nReason: *${reason}*`),
+                createSuccessEmbed('Progress Reset Completed', `Reset progress for <@${target.id}> to Tier 1.\nReason: *${reason}*`),
             ],
         });
     },

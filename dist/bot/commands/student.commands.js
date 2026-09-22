@@ -1,25 +1,22 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.continueCommand = exports.progressCommand = exports.subscriptionCommand = exports.linkCommand = void 0;
-const discord_js_1 = require("discord.js");
-const linking_service_js_1 = require("../../services/linking.service.js");
-const progress_service_js_1 = require("../../services/progress.service.js");
-const client_js_1 = require("../../db/client.js");
-const local_store_js_1 = require("../../db/local-store.js");
-const supabase_js_1 = require("../../db/supabase.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-const env_js_1 = require("../../config/env.js");
-const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
-exports.linkCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, } from 'discord.js';
+import { linkingService } from '../../services/linking.service.js';
+import { progressService } from '../../services/progress.service.js';
+import { prisma, isPostgresOnline } from '../../db/client.js';
+import { localStore } from '../../db/local-store.js';
+import { getSupabaseClient } from '../../db/supabase.js';
+import { createSuccessEmbed, createInfoEmbed, createWarningEmbed } from '../../utils/embed-builder.js';
+import { env } from '../../config/env.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
+export const linkCommand = {
+    data: new SlashCommandBuilder()
         .setName('link')
         .setDescription('Connect your Discord account to your verified Academy subscription'),
     async execute(interaction) {
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         try {
-            const supabase = (0, supabase_js_1.getSupabaseClient)();
-            const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+            const supabase = getSupabaseClient();
+            const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
             // 1. Check if user already has an approved payment verification in Supabase
             if (supabase) {
                 try {
@@ -32,14 +29,33 @@ exports.linkCommand = {
                         .limit(1);
                     if (data && data.length > 0) {
                         const rec = data[0];
+                        // Verify payment expiration
+                        const baseDate = rec.created_at ? new Date(rec.created_at) : new Date();
+                        const duration = rec.access_duration_days || 30;
+                        const expiresAt = rec.expires_at
+                            ? new Date(rec.expires_at)
+                            : new Date(baseDate.getTime() + duration * 86400000);
+                        if (expiresAt.getTime() <= Date.now()) {
+                            const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
+                                .setLabel('💳 Reactivate Membership')
+                                .setStyle(ButtonStyle.Link)
+                                .setURL(portalUrl));
+                            const embed = createWarningEmbed('⚠️ Course Subscription Expired', `Welcome back <@${interaction.user.id}>. We found your account record, but your course subscription expired on <t:${Math.floor(expiresAt.getTime() / 1000)}:F>.\n\n` +
+                                `• **Student:** \`${rec.student_name || interaction.user.username}\`\n` +
+                                `• **Previous Tier:** Tier ${rec.tier_number || 1}\n` +
+                                `• **Status:** ⚠️ **Subscription Expired**\n\n` +
+                                `👉 Click the button below to reactivate your membership on the payment portal and restore your roles!`);
+                            await interaction.editReply({ embeds: [embed], components: [row] });
+                            return;
+                        }
                         // Reconcile and assign Discord roles immediately
                         if (interaction.guild) {
                             const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
                             if (member) {
-                                if (env_js_1.env.ROLE_PREMIUM)
-                                    await member.roles.add(env_js_1.env.ROLE_PREMIUM).catch(() => { });
+                                if (env.ROLE_PREMIUM)
+                                    await member.roles.add(env.ROLE_PREMIUM).catch(() => { });
                                 const tier = rec.tier_number || 1;
-                                const tierRoleId = tier === 1 ? env_js_1.env.ROLE_TIER_1 : tier === 2 ? env_js_1.env.ROLE_TIER_2 : env_js_1.env.ROLE_TIER_3;
+                                const tierRoleId = tier === 1 ? env.ROLE_TIER_1 : tier === 2 ? env.ROLE_TIER_2 : env.ROLE_TIER_3;
                                 if (tierRoleId)
                                     await member.roles.add(tierRoleId).catch(() => { });
                             }
@@ -51,11 +67,11 @@ exports.linkCommand = {
                                 .update({ discord_id: interaction.user.id, discord_username: interaction.user.username, is_discord_verified: true })
                                 .eq('id', rec.id);
                         }
-                        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                        const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
                             .setLabel('💳 Open Student Portal')
-                            .setStyle(discord_js_1.ButtonStyle.Link)
+                            .setStyle(ButtonStyle.Link)
                             .setURL(portalUrl));
-                        const embed = (0, embed_builder_js_1.createSuccessEmbed)('🎉 Account Verified & Connected!', `Welcome <@${interaction.user.id}>! Your Academy subscription has been verified in the payment database:\n\n` +
+                        const embed = createSuccessEmbed('🎉 Account Verified & Connected!', `Welcome <@${interaction.user.id}>! Your Academy subscription has been verified in the payment database:\n\n` +
                             `• **Tier:** **Tier ${rec.tier_number || 1}**\n` +
                             `• **Status:** **Active Subscription**\n` +
                             `• **Student:** \`${rec.student_name || interaction.user.username}\`\n\n` +
@@ -73,11 +89,11 @@ exports.linkCommand = {
                         .limit(1);
                     if (pendingData && pendingData.length > 0) {
                         const pending = pendingData[0];
-                        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+                        const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
                             .setLabel('💳 Check Status on Portal')
-                            .setStyle(discord_js_1.ButtonStyle.Link)
+                            .setStyle(ButtonStyle.Link)
                             .setURL(portalUrl));
-                        const embed = (0, embed_builder_js_1.createInfoEmbed)('⏳ Payment Verification Under Review', `We found your pending payment submission:\n\n` +
+                        const embed = createInfoEmbed('⏳ Payment Verification Under Review', `We found your pending payment submission:\n\n` +
                             `• **Transaction ID:** \`${pending.transaction_id || 'N/A'}\`\n` +
                             `• **Submitted For:** Tier ${pending.tier_number || 1}\n` +
                             `• **Status:** ⏳ **Under Admin Review**\n\n` +
@@ -91,12 +107,12 @@ exports.linkCommand = {
                 }
             }
             // 3. Fallback: generate 6-digit linking code (offline / Supabase safe)
-            const linkData = await linking_service_js_1.linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
-            const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+            const linkData = await linkingService.createLinkingCodeForDiscordUser(interaction.user.id);
+            const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
                 .setLabel('🔗 Open Portal to Link Account')
-                .setStyle(discord_js_1.ButtonStyle.Link)
+                .setStyle(ButtonStyle.Link)
                 .setURL(portalUrl));
-            const embed = (0, embed_builder_js_1.createInfoEmbed)('🔗 Account Verification & Linking', `To link your Academy account and activate your roles:\n\n` +
+            const embed = createInfoEmbed('🔗 Account Verification & Linking', `To link your Academy account and activate your roles:\n\n` +
                 `1. Click the button below to open the official Student Portal:\n` +
                 `👉 **[Student Portal Link](${portalUrl})**\n\n` +
                 `2. Your 6-digit linking verification code:\n` +
@@ -106,23 +122,23 @@ exports.linkCommand = {
         }
         catch (error) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Linking Error', error.message || 'Unable to generate linking code')],
+                embeds: [createWarningEmbed('Linking Error', error.message || 'Unable to generate linking code')],
             });
         }
     },
 };
-exports.subscriptionCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const subscriptionCommand = {
+    data: new SlashCommandBuilder()
         .setName('subscription')
         .setDescription('View your current Academy membership, plan, and renewal date'),
     async execute(interaction) {
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         let user = null;
         // 1. Check PostgreSQL only if online
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({
+                user = await prisma.user.findUnique({
                     where: { discordId: interaction.user.id },
                     include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
                 });
@@ -133,11 +149,11 @@ exports.subscriptionCommand = {
         }
         // 2. Check localStore
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+            user = localStore.findUserByDiscordId(interaction.user.id);
         }
         // 3. Check Supabase payment_verifications
         if (!user) {
-            const supabase = (0, supabase_js_1.getSupabaseClient)();
+            const supabase = getSupabaseClient();
             if (supabase) {
                 try {
                     const { data } = await supabase
@@ -165,7 +181,7 @@ exports.subscriptionCommand = {
         }
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'No active subscription was found for this Discord profile. Submit payment on the portal or use `/link`.')],
+                embeds: [createWarningEmbed('Not Linked', 'No active subscription was found for this Discord profile. Submit payment on the portal or use `/link`.')],
             });
             return;
         }
@@ -173,12 +189,12 @@ exports.subscriptionCommand = {
         const expiresDate = user.subscriptionExpiresAt
             ? `<t:${Math.floor(new Date(user.subscriptionExpiresAt).getTime() / 1000)}:F> (<t:${Math.floor(new Date(user.subscriptionExpiresAt).getTime() / 1000)}:R>)`
             : '*No expiration set*';
-        const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
-        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+        const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
             .setLabel('⚡ Manage Subscription / Renew')
-            .setStyle(discord_js_1.ButtonStyle.Link)
+            .setStyle(ButtonStyle.Link)
             .setURL(portalUrl));
-        const embed = (0, embed_builder_js_1.createInfoEmbed)('💳 Subscription & Access Status', `**Student Email:** \`${user.email}\`\n` +
+        const embed = createInfoEmbed('💳 Subscription & Access Status', `**Student Email:** \`${user.email}\`\n` +
             `**Current Status:** \`${user.subscriptionStatus}\`\n` +
             `**Current Tier:** **Tier ${user.currentTier}**\n` +
             `**Plan:** \`${latestSub?.plan || 'Standard'}\`\n` +
@@ -187,17 +203,17 @@ exports.subscriptionCommand = {
         await interaction.editReply({ embeds: [embed], components: [row] });
     },
 };
-exports.progressCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const progressCommand = {
+    data: new SlashCommandBuilder()
         .setName('progress')
         .setDescription('View your detailed course completion, XP, and streak'),
     async execute(interaction) {
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({
+                user = await prisma.user.findUnique({
                     where: { discordId: interaction.user.id },
                 });
             }
@@ -206,16 +222,16 @@ exports.progressCommand = {
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+            user = localStore.findUserByDiscordId(interaction.user.id);
         }
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'Please run `/link` first to connect your Academy account.')],
+                embeds: [createWarningEmbed('Not Linked', 'Please run `/link` first to connect your Academy account.')],
             });
             return;
         }
-        const summary = await progress_service_js_1.progressService.getUserProgressSummary(user.id);
-        const embed = (0, embed_builder_js_1.createSuccessEmbed)('📊 Your Academy Progress', `**Overall Completion:** **${summary.overallPercentage}%** (${summary.totalCompleted}/${summary.totalLessons} lessons)\n` +
+        const summary = await progressService.getUserProgressSummary(user.id);
+        const embed = createSuccessEmbed('📊 Your Academy Progress', `**Overall Completion:** **${summary.overallPercentage}%** (${summary.totalCompleted}/${summary.totalLessons} lessons)\n` +
             `**Total XP:** **${summary.totalXp.toLocaleString()} XP**\n` +
             `**Learning Streak:** 🔥 **${summary.streakCount} day(s)**\n` +
             `**Active Tier:** **Tier ${summary.currentTier}**\n\n` +
@@ -226,17 +242,17 @@ exports.progressCommand = {
         await interaction.editReply({ embeds: [embed] });
     },
 };
-exports.continueCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+export const continueCommand = {
+    data: new SlashCommandBuilder()
         .setName('continue')
         .setDescription('Resume exactly where you left off in your lessons'),
     async execute(interaction) {
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, true)))
+        if (!(await safeDeferReply(interaction, true)))
             return;
         let user = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                user = await client_js_1.prisma.user.findUnique({
+                user = await prisma.user.findUnique({
                     where: { discordId: interaction.user.id },
                     include: { lessonProgress: true },
                 });
@@ -246,19 +262,19 @@ exports.continueCommand = {
             }
         }
         if (!user) {
-            user = local_store_js_1.localStore.findUserByDiscordId(interaction.user.id);
+            user = localStore.findUserByDiscordId(interaction.user.id);
         }
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'Please run `/link` first.')],
+                embeds: [createWarningEmbed('Not Linked', 'Please run `/link` first.')],
             });
             return;
         }
         const completedLessonIds = new Set((user.lessonProgress || []).filter((p) => p.completed).map((p) => p.lessonId));
         let nextLesson = null;
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                nextLesson = await client_js_1.prisma.lesson.findFirst({
+                nextLesson = await prisma.lesson.findFirst({
                     where: {
                         tier: { lte: user.currentTier },
                         id: { notIn: Array.from(completedLessonIds) },
@@ -272,11 +288,11 @@ exports.continueCommand = {
         }
         if (!nextLesson) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createSuccessEmbed)('All Caught Up!', `You have completed all available lessons for your current tier (Tier ${user.currentTier})! Check your final project requirements or wait for the next tier unlock.`)],
+                embeds: [createSuccessEmbed('All Caught Up!', `You have completed all available lessons for your current tier (Tier ${user.currentTier})! Check your final project requirements or wait for the next tier unlock.`)],
             });
             return;
         }
-        const embed = (0, embed_builder_js_1.createInfoEmbed)(`▶️ Next Up: ${nextLesson.title}`, `**Tier ${nextLesson.tier} • Module ${nextLesson.module} • Lesson ${nextLesson.orderIndex}**\n\n` +
+        const embed = createInfoEmbed(`▶️ Next Up: ${nextLesson.title}`, `**Tier ${nextLesson.tier} • Module ${nextLesson.module} • Lesson ${nextLesson.orderIndex}**\n\n` +
             `${nextLesson.description}\n\n` +
             `**Requirements:** Lesson Study (Video/Docs) ${nextLesson.requiresAssignment ? '+ Practical Assignment' : ''}\n\n` +
             `👉 **Access Materials in Discord:**\n` +

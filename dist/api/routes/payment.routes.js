@@ -1,16 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createPaymentRouter = createPaymentRouter;
-const express_1 = require("express");
-const manual_payment_service_js_1 = require("../../services/manual-payment.service.js");
-const payment_method_service_js_1 = require("../../services/payment-method.service.js");
-const error_logger_service_js_1 = require("../../services/error-logger.service.js");
-function createPaymentRouter(discordClient) {
-    const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { manualPaymentService } from '../../services/manual-payment.service.js';
+import { paymentMethodService } from '../../services/payment-method.service.js';
+import { errorLogger } from '../../services/error-logger.service.js';
+export function createPaymentRouter(discordClient) {
+    const router = Router();
     // Public endpoint for students to fetch active QR payment methods
     router.get('/methods', async (_req, res) => {
         try {
-            const methods = await payment_method_service_js_1.paymentMethodService.listActiveMethods();
+            const methods = await paymentMethodService.listActiveMethods();
             res.json({
                 success: true,
                 data: methods,
@@ -28,7 +25,7 @@ function createPaymentRouter(discordClient) {
     router.post('/manual-submit', async (req, res) => {
         try {
             const { studentName, phoneNumber, email, discordId, transactionId, amount, currency, paymentMethod, proofUrl, notes, } = req.body;
-            const payment = await manual_payment_service_js_1.manualPaymentService.submitPaymentProof({
+            const payment = await manualPaymentService.submitPaymentProof({
                 studentName,
                 phoneNumber,
                 email,
@@ -52,7 +49,7 @@ function createPaymentRouter(discordClient) {
             });
         }
         catch (error) {
-            await error_logger_service_js_1.errorLogger.report(discordClient ?? null, {
+            await errorLogger.report(discordClient ?? null, {
                 module: 'PAYMENT_PROOF_API',
                 action: 'SUBMIT_PROOF',
                 error,

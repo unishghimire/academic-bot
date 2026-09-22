@@ -1,15 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.progressService = exports.ProgressService = void 0;
-const client_1 = require("@prisma/client");
-const client_js_1 = require("../db/client.js");
-const constants_js_1 = require("../config/constants.js");
-const xp_service_js_1 = require("./xp.service.js");
-const tier_engine_service_js_1 = require("./tier-engine.service.js");
-const logger_js_1 = require("../utils/logger.js");
-class ProgressService {
+import { AssignmentStatus } from '@prisma/client';
+import { prisma as defaultPrisma } from '../db/client.js';
+import { COMPLETION_THRESHOLDS, XP_REWARDS } from '../config/constants.js';
+import { xpService } from './xp.service.js';
+import { tierEngine } from './tier-engine.service.js';
+import { logger } from '../utils/logger.js';
+export class ProgressService {
     db;
-    constructor(db = client_js_1.prisma) {
+    constructor(db = defaultPrisma) {
         this.db = db;
     }
     /**
@@ -17,7 +14,7 @@ class ProgressService {
      * Discord presentation layer NEVER guesses or mocks video watch percentage.
      */
     async updateWatchProgress(userId, lessonId, watchPercent) {
-        const videoCompleted = watchPercent >= constants_js_1.COMPLETION_THRESHOLDS.VIDEO_WATCH_PERCENT;
+        const videoCompleted = watchPercent >= COMPLETION_THRESHOLDS.VIDEO_WATCH_PERCENT;
         const progress = await this.db.lessonProgress.upsert({
             where: {
                 userId_lessonId: { userId, lessonId },
@@ -72,7 +69,7 @@ class ProgressService {
                 where: {
                     userId,
                     assignmentId: lesson.assignment.id,
-                    status: client_1.AssignmentStatus.APPROVED,
+                    status: AssignmentStatus.APPROVED,
                 },
             });
             assignmentApproved = Boolean(approvedSubmission);
@@ -101,18 +98,18 @@ class ProgressService {
             });
             newlyCompleted = true;
             // Award XP for lesson completion
-            await xp_service_js_1.xpService.awardXp(userId, constants_js_1.XP_REWARDS.LESSON_COMPLETED, `Completed Lesson: ${lesson.title}`, 'lesson', lessonId);
-            xpAwarded += constants_js_1.XP_REWARDS.LESSON_COMPLETED;
+            await xpService.awardXp(userId, XP_REWARDS.LESSON_COMPLETED, `Completed Lesson: ${lesson.title}`, 'lesson', lessonId);
+            xpAwarded += XP_REWARDS.LESSON_COMPLETED;
             // Extend learning streak
-            await xp_service_js_1.xpService.recordActivity(userId);
+            await xpService.recordActivity(userId);
             // Evaluate achievements
-            await xp_service_js_1.xpService.evaluateAchievements(userId);
+            await xpService.evaluateAchievements(userId);
             // Evaluate tier progression
-            const tierResult = await tier_engine_service_js_1.tierEngine.evaluateTier(userId);
+            const tierResult = await tierEngine.evaluateTier(userId);
             if (tierResult.unlocked) {
                 tierUnlocked = tierResult.eligibleTier;
             }
-            logger_js_1.logger.info({ userId, lessonId, title: lesson.title }, 'Lesson completed successfully');
+            logger.info({ userId, lessonId, title: lesson.title }, 'Lesson completed successfully');
         }
         return {
             lessonId,
@@ -159,7 +156,7 @@ class ProgressService {
         const totalLessons = allLessons.length;
         const totalCompleted = completedLessonIds.size;
         const overallPercentage = totalLessons > 0 ? Math.round((totalCompleted / totalLessons) * 100) : 0;
-        const totalXp = await xp_service_js_1.xpService.getUserTotalXp(userId);
+        const totalXp = await xpService.getUserTotalXp(userId);
         return {
             userId,
             discordId: user.discordId,
@@ -173,6 +170,5 @@ class ProgressService {
         };
     }
 }
-exports.ProgressService = ProgressService;
-exports.progressService = new ProgressService();
+export const progressService = new ProgressService();
 //# sourceMappingURL=progress.service.js.map

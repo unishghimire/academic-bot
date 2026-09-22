@@ -1,12 +1,9 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.supportCommand = void 0;
-const discord_js_1 = require("discord.js");
-const client_js_1 = require("../../db/client.js");
-const env_js_1 = require("../../config/env.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-exports.supportCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder, ChannelType, PermissionFlagsBits, } from 'discord.js';
+import { prisma } from '../../db/client.js';
+import { env } from '../../config/env.js';
+import { createSuccessEmbed, createWarningEmbed, createInfoEmbed } from '../../utils/embed-builder.js';
+export const supportCommand = {
+    data: new SlashCommandBuilder()
         .setName('support')
         .setDescription('Open a private support ticket with Academy instructors & staff')
         .addStringOption(opt => opt
@@ -22,12 +19,12 @@ exports.supportCommand = {
             await interaction.editReply('This command can only be used in the Academy Discord server.');
             return;
         }
-        const user = await client_js_1.prisma.user.findUnique({
+        const user = await prisma.user.findUnique({
             where: { discordId: interaction.user.id },
         });
         if (!user) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Not Linked', 'Please run `/link` first so staff can identify your account.')],
+                embeds: [createWarningEmbed('Not Linked', 'Please run `/link` first so staff can identify your account.')],
             });
             return;
         }
@@ -38,28 +35,28 @@ exports.supportCommand = {
             const channelName = `ticket-${interaction.user.username.slice(0, 10)}-${Date.now().toString().slice(-4)}`;
             const ticketChannel = await guild.channels.create({
                 name: channelName,
-                type: discord_js_1.ChannelType.GuildText,
+                type: ChannelType.GuildText,
                 permissionOverwrites: [
                     {
                         id: guild.id, // @everyone
-                        deny: [discord_js_1.PermissionFlagsBits.ViewChannel],
+                        deny: [PermissionFlagsBits.ViewChannel],
                     },
                     {
                         id: interaction.user.id, // Student
-                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.AttachFiles],
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles],
                     },
                     {
-                        id: env_js_1.env.ROLE_INSTRUCTOR, // Instructors
-                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.AttachFiles],
+                        id: env.ROLE_INSTRUCTOR, // Instructors
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles],
                     },
                     {
-                        id: env_js_1.env.ROLE_ADMIN, // Admins
-                        allow: [discord_js_1.PermissionFlagsBits.ViewChannel, discord_js_1.PermissionFlagsBits.SendMessages, discord_js_1.PermissionFlagsBits.AttachFiles],
+                        id: env.ROLE_ADMIN, // Admins
+                        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles],
                     },
                 ],
             });
             // Save ticket in database
-            const ticket = await client_js_1.prisma.ticket.create({
+            const ticket = await prisma.ticket.create({
                 data: {
                     userId: user.id,
                     category,
@@ -68,7 +65,7 @@ exports.supportCommand = {
                 },
             });
             // Post initial message into ticket channel
-            const introEmbed = (0, embed_builder_js_1.createInfoEmbed)(`🎫 Support Ticket #${ticket.id.slice(-6)}`, `**Student:** <@${interaction.user.id}> (\`${user.email}\`)\n` +
+            const introEmbed = createInfoEmbed(`🎫 Support Ticket #${ticket.id.slice(-6)}`, `**Student:** <@${interaction.user.id}> (\`${user.email}\`)\n` +
                 `**Tier:** Tier ${user.currentTier}\n` +
                 `**Category:** \`${category}\`\n\n` +
                 `**Issue Description:**\n${description}\n\n` +
@@ -76,13 +73,13 @@ exports.supportCommand = {
             await ticketChannel.send({ embeds: [introEmbed] });
             await interaction.editReply({
                 embeds: [
-                    (0, embed_builder_js_1.createSuccessEmbed)('Ticket Created!', `Your private support channel has been opened: <#${ticketChannel.id}>. A staff member will assist you there.`),
+                    createSuccessEmbed('Ticket Created!', `Your private support channel has been opened: <#${ticketChannel.id}>. A staff member will assist you there.`),
                 ],
             });
         }
         catch (error) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Ticket Creation Failed', error.message || 'Could not create support channel')],
+                embeds: [createWarningEmbed('Ticket Creation Failed', error.message || 'Could not create support channel')],
             });
         }
     },

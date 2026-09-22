@@ -1,58 +1,62 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.roleSyncService = exports.RoleSyncService = void 0;
-const client_1 = require("@prisma/client");
-const client_js_1 = require("../db/client.js");
-const env_js_1 = require("../config/env.js");
-const audit_service_js_1 = require("./audit.service.js");
-const logger_js_1 = require("../utils/logger.js");
-const constants_js_1 = require("../config/constants.js");
-const local_store_js_1 = require("../db/local-store.js");
-class RoleSyncService {
+import { SubscriptionStatus } from '@prisma/client';
+import { prisma as defaultPrisma, isPostgresOnline } from '../db/client.js';
+import { env } from '../config/env.js';
+import { auditService } from './audit.service.js';
+import { logger } from '../utils/logger.js';
+import { TIER_LEVELS } from '../config/constants.js';
+import { localStore } from '../db/local-store.js';
+import { getSupabaseClient } from '../db/supabase.js';
+export class RoleSyncService {
     db;
-    constructor(db = client_js_1.prisma) {
+    constructor(db = defaultPrisma) {
         this.db = db;
     }
     /**
      * Derives the set of managed Academy role IDs a user should possess based on DB state.
+     * Strictly checks both subscriptionStatus AND subscriptionExpiresAt timestamp.
      */
     computeExpectedRoles(user) {
         const expectedRoleIds = new Set();
         const prohibitedRoleIds = new Set();
         const allManagedRoles = [
-            env_js_1.env.ROLE_PREMIUM,
-            env_js_1.env.ROLE_TIER_1,
-            env_js_1.env.ROLE_TIER_2,
-            env_js_1.env.ROLE_TIER_3,
-            env_js_1.env.ROLE_GRADUATE,
+            env.ROLE_PREMIUM,
+            env.ROLE_TIER_1,
+            env.ROLE_TIER_2,
+            env.ROLE_TIER_3,
+            env.ROLE_GRADUATE,
         ].filter(Boolean);
-        if (user.subscriptionStatus === client_1.SubscriptionStatus.ACTIVE) {
-            expectedRoleIds.add(env_js_1.env.ROLE_PREMIUM);
-            if (user.currentTier >= constants_js_1.TIER_LEVELS.TIER_1) {
-                expectedRoleIds.add(env_js_1.env.ROLE_TIER_1);
+        // Verify user is marked ACTIVE AND expiration timestamp has not elapsed
+        const isExpired = user.subscriptionExpiresAt
+            ? new Date(user.subscriptionExpiresAt).getTime() <= Date.now()
+            : false;
+        const isActuallyActive = user.subscriptionStatus === SubscriptionStatus.ACTIVE && !isExpired;
+        if (isActuallyActive) {
+            expectedRoleIds.add(env.ROLE_PREMIUM);
+            if (user.currentTier >= TIER_LEVELS.TIER_1) {
+                expectedRoleIds.add(env.ROLE_TIER_1);
             }
-            if (user.currentTier >= constants_js_1.TIER_LEVELS.TIER_2) {
-                expectedRoleIds.add(env_js_1.env.ROLE_TIER_2);
+            if (user.currentTier >= TIER_LEVELS.TIER_2) {
+                expectedRoleIds.add(env.ROLE_TIER_2);
             }
-            if (user.currentTier >= constants_js_1.TIER_LEVELS.TIER_3) {
-                expectedRoleIds.add(env_js_1.env.ROLE_TIER_3);
+            if (user.currentTier >= TIER_LEVELS.TIER_3) {
+                expectedRoleIds.add(env.ROLE_TIER_3);
             }
-            if (user.currentTier >= constants_js_1.TIER_LEVELS.GRADUATE) {
-                expectedRoleIds.add(env_js_1.env.ROLE_GRADUATE);
+            if (user.currentTier >= TIER_LEVELS.GRADUATE) {
+                expectedRoleIds.add(env.ROLE_GRADUATE);
             }
             // Prohibit tiers higher than granted currentTier
-            if (user.currentTier < constants_js_1.TIER_LEVELS.TIER_2) {
-                prohibitedRoleIds.add(env_js_1.env.ROLE_TIER_2);
+            if (user.currentTier < TIER_LEVELS.TIER_2) {
+                prohibitedRoleIds.add(env.ROLE_TIER_2);
             }
-            if (user.currentTier < constants_js_1.TIER_LEVELS.TIER_3) {
-                prohibitedRoleIds.add(env_js_1.env.ROLE_TIER_3);
+            if (user.currentTier < TIER_LEVELS.TIER_3) {
+                prohibitedRoleIds.add(env.ROLE_TIER_3);
             }
-            if (user.currentTier < constants_js_1.TIER_LEVELS.GRADUATE) {
-                prohibitedRoleIds.add(env_js_1.env.ROLE_GRADUATE);
+            if (user.currentTier < TIER_LEVELS.GRADUATE) {
+                prohibitedRoleIds.add(env.ROLE_GRADUATE);
             }
         }
         else {
-            // Inactive, expired, or cancelled: revoke all academy progression & premium roles
+            // Inactive, expired, or cancelled: revoke all academy progression & premium roles directly
             for (const roleId of allManagedRoles) {
                 prohibitedRoleIds.add(roleId);
             }
@@ -65,23 +69,55 @@ class RoleSyncService {
      */
     async syncUserRoles(userId, client) {
         let user = null;
-        if (this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)()) {
-            user = local_store_js_1.localStore.getUsers().find(u => u.id === userId);
+        if (this.db === defaultPrisma && !isPostgresOnline()) {
+            user = localStore.getUsers().find(u => u.id === userId || u.discordId === userId);
         }
         else {
             try {
-                user = await this.db.user.findUnique({ where: { id: userId } });
+                user = await this.db.user.findFirst({
+                    where: { OR: [{ id: userId }, { discordId: userId }] },
+                });
             }
             catch {
-                user = local_store_js_1.localStore.getUsers().find(u => u.id === userId);
+                user = localStore.getUsers().find(u => u.id === userId || u.discordId === userId);
+            }
+        }
+        if (!user) {
+            user = localStore.findUserByDiscordId(userId);
+        }
+        // Supabase fallback if user record is only present in payment_verifications
+        if (!user) {
+            const supabase = getSupabaseClient();
+            if (supabase) {
+                try {
+                    const { data } = await supabase
+                        .from('payment_verifications')
+                        .select('*')
+                        .or(`id.eq.${userId},discord_id.eq.${userId}`)
+                        .limit(1);
+                    if (data && data.length > 0) {
+                        const rec = data[0];
+                        const baseDate = rec.created_at ? new Date(rec.created_at) : new Date();
+                        const duration = rec.access_duration_days || 30;
+                        const expiresAt = rec.expires_at ? new Date(rec.expires_at) : new Date(baseDate.getTime() + duration * 86400000);
+                        user = {
+                            id: rec.id,
+                            discordId: rec.discord_id,
+                            subscriptionStatus: ['approved', 'verified'].includes(rec.status?.toLowerCase()) ? SubscriptionStatus.ACTIVE : SubscriptionStatus.EXPIRED,
+                            subscriptionExpiresAt: expiresAt,
+                            currentTier: rec.tier_number || 1,
+                        };
+                    }
+                }
+                catch { }
             }
         }
         if (!user || !user.discordId) {
             return null;
         }
-        const guild = client.guilds.cache.get(env_js_1.env.DISCORD_GUILD_ID);
+        const guild = client.guilds.cache.get(env.DISCORD_GUILD_ID);
         if (!guild) {
-            logger_js_1.logger.warn({ guildId: env_js_1.env.DISCORD_GUILD_ID }, 'Guild not found during role sync');
+            logger.warn({ guildId: env.DISCORD_GUILD_ID }, 'Guild not found during role sync');
             return null;
         }
         let member;
@@ -116,7 +152,7 @@ class RoleSyncService {
                 await member.roles.remove(rolesToRemove);
             }
             // Record correction to append-only audit log
-            await audit_service_js_1.auditService.log({
+            await auditService.log({
                 actorType: 'SYSTEM',
                 actorId: 'ROLE_SYNC_JOB',
                 action: 'ROLE_RECONCILIATION_CORRECTION',
@@ -129,7 +165,7 @@ class RoleSyncService {
                     removed: rolesToRemove,
                 },
             });
-            logger_js_1.logger.info({
+            logger.info({
                 userId: user.id,
                 discordId: user.discordId,
                 added: rolesToAdd,
@@ -149,8 +185,8 @@ class RoleSyncService {
      */
     async syncAllLinkedUsers(client) {
         let userIds = [];
-        if (this.db === client_js_1.prisma && !(0, client_js_1.isPostgresOnline)()) {
-            userIds = local_store_js_1.localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+        if (this.db === defaultPrisma && !isPostgresOnline()) {
+            userIds = localStore.getUsers().filter(u => u.discordId).map(u => u.id);
         }
         else {
             try {
@@ -161,7 +197,7 @@ class RoleSyncService {
                 userIds = linkedUsers.map(u => u.id);
             }
             catch {
-                userIds = local_store_js_1.localStore.getUsers().filter(u => u.discordId).map(u => u.id);
+                userIds = localStore.getUsers().filter(u => u.discordId).map(u => u.id);
             }
         }
         let corrected = 0;
@@ -173,13 +209,12 @@ class RoleSyncService {
                 }
             }
             catch (error) {
-                logger_js_1.logger.error({ err: error, userId: id }, 'Error syncing user roles during sweep');
+                logger.error({ err: error, userId: id }, 'Error syncing user roles during sweep');
             }
         }
-        logger_js_1.logger.info({ total: userIds.length, corrected }, 'Completed full role sync sweep');
+        logger.info({ total: userIds.length, corrected }, 'Completed full role sync sweep');
         return { total: userIds.length, corrected };
     }
 }
-exports.RoleSyncService = RoleSyncService;
-exports.roleSyncService = new RoleSyncService();
+export const roleSyncService = new RoleSyncService();
 //# sourceMappingURL=role-sync.service.js.map

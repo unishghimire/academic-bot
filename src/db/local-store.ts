@@ -18,12 +18,18 @@ interface LocalData {
   users?: any[];
   liveClasses?: any[];
   linkingCodes?: LocalLinkingCode[];
+  warningsSent?: Record<string, string>;
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'local_storage.json');
+let cachedData: LocalData | null = null;
 
 function ensureDataFile(): LocalData {
+  if (cachedData) {
+    return cachedData;
+  }
+
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -60,16 +66,20 @@ function ensureDataFile(): LocalData {
         auditLogs: [],
       };
       fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
-      return initialData;
+      cachedData = initialData;
+      return cachedData;
     }
     const content = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(content);
+    cachedData = JSON.parse(content);
+    return cachedData!;
   } catch {
-    return { paymentMethods: [], manualPayments: [], auditLogs: [] };
+    cachedData = { paymentMethods: [], manualPayments: [], auditLogs: [] };
+    return cachedData;
   }
 }
 
 function saveData(data: LocalData): void {
+  cachedData = data;
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -281,5 +291,38 @@ export const localStore = {
       return true;
     }
     return false;
+  },
+
+  // Expiry Warnings & Notices Tracking
+  hasWarningBeenSent(userId: string, expiresAt: Date | string): boolean {
+    const data = ensureDataFile();
+    const warnings = data.warningsSent || {};
+    const key = `warning_3d:${userId}:${new Date(expiresAt).toISOString().split('T')[0]}`;
+    return Boolean(warnings[key]);
+  },
+
+  markWarningSent(userId: string, expiresAt: Date | string): void {
+    const data = ensureDataFile();
+    if (!data.warningsSent) data.warningsSent = {};
+    const key = `warning_3d:${userId}:${new Date(expiresAt).toISOString().split('T')[0]}`;
+    data.warningsSent[key] = new Date().toISOString();
+    saveData(data);
+  },
+
+  hasExpiredNoticeBeenSent(userId: string, expiresAt?: Date | string | null): boolean {
+    const data = ensureDataFile();
+    const warnings = data.warningsSent || {};
+    const dateStr = expiresAt ? new Date(expiresAt).toISOString().split('T')[0] : 'general';
+    const key = `expired_notice:${userId}:${dateStr}`;
+    return Boolean(warnings[key]);
+  },
+
+  markExpiredNoticeSent(userId: string, expiresAt?: Date | string | null): void {
+    const data = ensureDataFile();
+    if (!data.warningsSent) data.warningsSent = {};
+    const dateStr = expiresAt ? new Date(expiresAt).toISOString().split('T')[0] : 'general';
+    const key = `expired_notice:${userId}:${dateStr}`;
+    data.warningsSent[key] = new Date().toISOString();
+    saveData(data);
   }
 };

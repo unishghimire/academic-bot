@@ -1,16 +1,13 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.paymentVerificationSyncService = exports.PaymentVerificationSyncService = void 0;
-const discord_js_1 = require("discord.js");
-const supabase_js_1 = require("../db/supabase.js");
-const client_js_1 = require("../db/client.js");
-const local_store_js_1 = require("../db/local-store.js");
-const client_1 = require("@prisma/client");
-const env_js_1 = require("../config/env.js");
-const constants_js_1 = require("../config/constants.js");
-const logger_js_1 = require("../utils/logger.js");
-const audit_service_js_1 = require("./audit.service.js");
-class PaymentVerificationSyncService {
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, } from 'discord.js';
+import { getSupabaseClient } from '../db/supabase.js';
+import { prisma, isPostgresOnline } from '../db/client.js';
+import { localStore } from '../db/local-store.js';
+import { SubscriptionStatus } from '@prisma/client';
+import { env } from '../config/env.js';
+import { COLORS, EMBED_FOOTER } from '../config/constants.js';
+import { logger } from '../utils/logger.js';
+import { auditService } from './audit.service.js';
+export class PaymentVerificationSyncService {
     /**
      * Sweeps the database for approved payment verifications and grants Discord roles to users
      */
@@ -19,12 +16,12 @@ class PaymentVerificationSyncService {
         if (!client.isReady()) {
             return result;
         }
-        const guild = client.guilds.cache.get(env_js_1.env.DISCORD_GUILD_ID);
+        const guild = client.guilds.cache.get(env.DISCORD_GUILD_ID);
         if (!guild) {
-            logger_js_1.logger.warn({ guildId: env_js_1.env.DISCORD_GUILD_ID }, 'Guild not found for payment verification sync');
+            logger.warn({ guildId: env.DISCORD_GUILD_ID }, 'Guild not found for payment verification sync');
             return result;
         }
-        const supabase = (0, supabase_js_1.getSupabaseClient)();
+        const supabase = getSupabaseClient();
         let pendingApprovals = [];
         // 1. Fetch approved rows from Supabase
         if (supabase) {
@@ -41,24 +38,24 @@ class PaymentVerificationSyncService {
                     pendingApprovals = data;
                 }
                 else if (error) {
-                    logger_js_1.logger.warn({ err: error }, 'Supabase query for approved payments encountered an issue');
+                    logger.warn({ err: error }, 'Supabase query for approved payments encountered an issue');
                 }
             }
             catch (err) {
-                logger_js_1.logger.warn({ err }, 'Failed to query Supabase payment_verifications');
+                logger.warn({ err }, 'Failed to query Supabase payment_verifications');
             }
         }
         // 2. Fallback to Prisma raw query if PostgreSQL is online and Supabase returned empty
-        if (pendingApprovals.length === 0 && (0, client_js_1.isPostgresOnline)()) {
+        if (pendingApprovals.length === 0 && isPostgresOnline()) {
             try {
                 const rows = forceAll
-                    ? await client_js_1.prisma.$queryRaw `
+                    ? await prisma.$queryRaw `
               SELECT * FROM public.payment_verifications 
               WHERE LOWER(status) IN ('verified', 'approved') 
               ORDER BY created_at ASC
               LIMIT 50
             `
-                    : await client_js_1.prisma.$queryRaw `
+                    : await prisma.$queryRaw `
               SELECT * FROM public.payment_verifications 
               WHERE LOWER(status) IN ('verified', 'approved') 
                 AND (is_discord_verified IS FALSE OR is_discord_verified IS NULL)
@@ -77,42 +74,75 @@ class PaymentVerificationSyncService {
             return result;
         }
         result.totalFound = pendingApprovals.length;
-        logger_js_1.logger.info({ count: pendingApprovals.length, forceAll }, 'Scanning approved payment verifications for Discord role grant');
+        logger.info({ count: pendingApprovals.length, forceAll }, 'Scanning approved payment verifications for Discord role grant');
         for (const record of pendingApprovals) {
             try {
                 const member = await this.resolveGuildMember(guild, record.discord_id, record.discord_username, record.email);
                 if (!member) {
-                    logger_js_1.logger.warn({ recordId: record.id, student: record.student_name, discordId: record.discord_id, username: record.discord_username }, 'Student member not found in Discord server yet. Will retry on next sweep.');
+                    logger.warn({ recordId: record.id, student: record.student_name, discordId: record.discord_id, username: record.discord_username }, 'Student member not found in Discord server yet. Will retry on next sweep.');
+                    continue;
+                }
+                const tier = record.tier_number || 1;
+                // Verify payment is not expired
+                const baseDate = record.created_at ? new Date(record.created_at) : new Date();
+                const duration = record.access_duration_days || 30;
+                const expiresAt = record.expires_at
+                    ? new Date(record.expires_at)
+                    : new Date(baseDate.getTime() + duration * 86400000);
+                const isExpired = expiresAt.getTime() <= Date.now();
+                if (isExpired) {
+                    logger.info({ memberId: member.id, expiresAt: expiresAt.toISOString() }, 'Payment verification record is already expired; removing roles if present.');
+                    const managedRoles = [
+                        env.ROLE_PREMIUM,
+                        env.ROLE_TIER_1,
+                        env.ROLE_TIER_2,
+                        env.ROLE_TIER_3,
+                        env.ROLE_GRADUATE,
+                    ].filter(Boolean);
+                    const rolesToRemove = managedRoles.filter(r => member.roles.cache.has(r));
+                    if (rolesToRemove.length > 0) {
+                        await member.roles.remove(rolesToRemove).catch(() => { });
+                    }
+                    localStore.saveUser({
+                        id: `usr_${member.id}`,
+                        email: record.email || `${member.user.username}@discord.local`,
+                        discordId: member.id,
+                        currentTier: tier,
+                        subscriptionStatus: SubscriptionStatus.EXPIRED,
+                        subscriptionExpiresAt: expiresAt,
+                    });
+                    if (!record.is_discord_verified) {
+                        await this.markRecordVerified(record.id, member.id);
+                    }
                     continue;
                 }
                 // Determine roles to assign
-                const tier = record.tier_number || 1;
                 const rolesToAdd = [];
-                if (env_js_1.env.ROLE_PREMIUM && !member.roles.cache.has(env_js_1.env.ROLE_PREMIUM)) {
-                    rolesToAdd.push(env_js_1.env.ROLE_PREMIUM);
+                if (env.ROLE_PREMIUM && !member.roles.cache.has(env.ROLE_PREMIUM)) {
+                    rolesToAdd.push(env.ROLE_PREMIUM);
                 }
-                if (tier >= 1 && env_js_1.env.ROLE_TIER_1 && !member.roles.cache.has(env_js_1.env.ROLE_TIER_1)) {
-                    rolesToAdd.push(env_js_1.env.ROLE_TIER_1);
+                if (tier >= 1 && env.ROLE_TIER_1 && !member.roles.cache.has(env.ROLE_TIER_1)) {
+                    rolesToAdd.push(env.ROLE_TIER_1);
                 }
-                if (tier >= 2 && env_js_1.env.ROLE_TIER_2 && !member.roles.cache.has(env_js_1.env.ROLE_TIER_2)) {
-                    rolesToAdd.push(env_js_1.env.ROLE_TIER_2);
+                if (tier >= 2 && env.ROLE_TIER_2 && !member.roles.cache.has(env.ROLE_TIER_2)) {
+                    rolesToAdd.push(env.ROLE_TIER_2);
                 }
-                if (tier >= 3 && env_js_1.env.ROLE_TIER_3 && !member.roles.cache.has(env_js_1.env.ROLE_TIER_3)) {
-                    rolesToAdd.push(env_js_1.env.ROLE_TIER_3);
+                if (tier >= 3 && env.ROLE_TIER_3 && !member.roles.cache.has(env.ROLE_TIER_3)) {
+                    rolesToAdd.push(env.ROLE_TIER_3);
                 }
                 if (rolesToAdd.length > 0) {
                     await member.roles.add(rolesToAdd);
-                    logger_js_1.logger.info({ memberId: member.id, roles: rolesToAdd, tier }, 'Assigned Discord subscriber roles after admin database approval');
+                    logger.info({ memberId: member.id, roles: rolesToAdd, tier }, 'Assigned Discord subscriber roles after admin database approval');
                     result.rolesAssigned++;
                 }
                 // Update local resilient store as well
-                local_store_js_1.localStore.saveUser({
+                localStore.saveUser({
                     id: `usr_${member.id}`,
                     email: record.email || `${member.user.username}@discord.local`,
                     discordId: member.id,
                     currentTier: tier,
-                    subscriptionStatus: client_1.SubscriptionStatus.ACTIVE,
-                    subscriptionExpiresAt: new Date(Date.now() + (record.access_duration_days || 30) * 24 * 60 * 60 * 1000),
+                    subscriptionStatus: SubscriptionStatus.ACTIVE,
+                    subscriptionExpiresAt: expiresAt,
                 });
                 // Mark record as verified in database if not yet marked
                 if (!record.is_discord_verified) {
@@ -120,7 +150,7 @@ class PaymentVerificationSyncService {
                     // Send congratulatory Discord DM to student
                     await this.sendApprovalDM(member, record, tier);
                     // Record in audit log
-                    await audit_service_js_1.auditService.log({
+                    await auditService.log({
                         actorType: 'SYSTEM',
                         actorId: 'PAYMENT_VERIFICATION_SYNC',
                         action: 'ADMIN_PANEL_PAYMENT_VERIFIED',
@@ -136,7 +166,7 @@ class PaymentVerificationSyncService {
                 }
             }
             catch (err) {
-                logger_js_1.logger.error({ err, recordId: record.id }, 'Error processing approved payment record');
+                logger.error({ err, recordId: record.id }, 'Error processing approved payment record');
                 result.errors++;
             }
         }
@@ -190,7 +220,7 @@ class PaymentVerificationSyncService {
      * Updates the verification record in Supabase / PostgreSQL
      */
     async markRecordVerified(recordId, verifiedDiscordId) {
-        const supabase = (0, supabase_js_1.getSupabaseClient)();
+        const supabase = getSupabaseClient();
         if (supabase) {
             try {
                 await supabase
@@ -203,12 +233,12 @@ class PaymentVerificationSyncService {
                 return;
             }
             catch (err) {
-                logger_js_1.logger.warn({ err }, 'Failed to mark record verified via Supabase');
+                logger.warn({ err }, 'Failed to mark record verified via Supabase');
             }
         }
-        if ((0, client_js_1.isPostgresOnline)()) {
+        if (isPostgresOnline()) {
             try {
-                await client_js_1.prisma.$executeRaw `
+                await prisma.$executeRaw `
           UPDATE public.payment_verifications 
           SET is_discord_verified = true, discord_id = ${verifiedDiscordId}
           WHERE id = ${recordId}
@@ -223,15 +253,15 @@ class PaymentVerificationSyncService {
      * Sends a private welcome DM to the student on Discord, with channel announcement
      */
     async sendApprovalDM(member, record, tier) {
-        const portalUrl = env_js_1.env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
+        const portalUrl = env.STUDENT_PORTAL_URL || 'https://academic-student-portal.vercel.app';
         const durationDays = record.access_duration_days || 30;
-        const row = new discord_js_1.ActionRowBuilder().addComponents(new discord_js_1.ButtonBuilder()
+        const row = new ActionRowBuilder().addComponents(new ButtonBuilder()
             .setLabel('⚡ Open Student Portal')
-            .setStyle(discord_js_1.ButtonStyle.Link)
+            .setStyle(ButtonStyle.Link)
             .setURL(portalUrl));
-        const embed = new discord_js_1.EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle('🎉 Welcome to The Elite Circle Academy!')
-            .setColor(constants_js_1.COLORS.SUCCESS)
+            .setColor(COLORS.SUCCESS)
             .setDescription(`Hello **${record.student_name}**, your payment proof of **${record.amount} ${record.currency || 'NPR'}** has been **approved** by our administration!\n\n` +
             `• **Verified Plan:** **Tier ${tier}** + Premium Subscriber\n` +
             `• **Access Duration:** **${durationDays} Days**\n` +
@@ -240,31 +270,31 @@ class PaymentVerificationSyncService {
             `📅 **Check Scheduled Classes:** Run \`/meeting list\`\n` +
             `💳 **View Subscription Details:** Run \`/subscription\`\n\n` +
             `Welcome to the Academy! Let's build your success together.`)
-            .setFooter(constants_js_1.EMBED_FOOTER)
+            .setFooter(EMBED_FOOTER)
             .setTimestamp();
         // 1. Send private DM to student inbox
         let dmSent = false;
         try {
             await member.send({ embeds: [embed], components: [row] });
             dmSent = true;
-            logger_js_1.logger.info({ memberId: member.id }, 'Delivered welcome approval DM to student inbox');
+            logger.info({ memberId: member.id }, 'Delivered welcome approval DM to student inbox');
         }
         catch {
-            logger_js_1.logger.info({ memberId: member.id }, 'Could not deliver DM (user has private DMs closed)');
+            logger.info({ memberId: member.id }, 'Could not deliver DM (user has private DMs closed)');
         }
         // 2. Post welcoming announcement in welcome or announcements channel
         try {
-            const welcomeChannelId = env_js_1.env.CHANNEL_WELCOME || env_js_1.env.CHANNEL_ANNOUNCEMENTS;
+            const welcomeChannelId = env.CHANNEL_WELCOME || env.CHANNEL_ANNOUNCEMENTS;
             if (welcomeChannelId) {
                 const channel = member.guild.channels.cache.get(welcomeChannelId);
                 if (channel && channel.isTextBased()) {
-                    const publicEmbed = new discord_js_1.EmbedBuilder()
+                    const publicEmbed = new EmbedBuilder()
                         .setTitle('🎓 New Subscriber Verified & Welcomed!')
-                        .setColor(constants_js_1.COLORS.PRIMARY)
+                        .setColor(COLORS.PRIMARY)
                         .setDescription(`Please welcome <@${member.id}> to **The Elite Circle Academy**!\n\n` +
                         `• **Access Granted:** **Tier ${tier}** & Premium Subscriber\n` +
                         `• **Live Classes & Meetings:** Check \`/meeting list\` to join upcoming live training!`)
-                        .setFooter(constants_js_1.EMBED_FOOTER)
+                        .setFooter(EMBED_FOOTER)
                         .setTimestamp();
                     await channel.send({ embeds: [publicEmbed], components: [row] }).catch(() => { });
                 }
@@ -275,6 +305,5 @@ class PaymentVerificationSyncService {
         }
     }
 }
-exports.PaymentVerificationSyncService = PaymentVerificationSyncService;
-exports.paymentVerificationSyncService = new PaymentVerificationSyncService();
+export const paymentVerificationSyncService = new PaymentVerificationSyncService();
 //# sourceMappingURL=payment-verification-sync.service.js.map

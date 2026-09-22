@@ -1,20 +1,17 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.setupServerCommand = void 0;
-const discord_js_1 = require("discord.js");
-const permissions_js_1 = require("../middleware/permissions.js");
-const server_setup_service_js_1 = require("../../services/server-setup.service.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-const interaction_utils_js_1 = require("../../utils/interaction.utils.js");
-exports.setupServerCommand = {
-    data: new discord_js_1.SlashCommandBuilder()
+import { SlashCommandBuilder } from 'discord.js';
+import { requireAdmin } from '../middleware/permissions.js';
+import { serverSetupService } from '../../services/server-setup.service.js';
+import { createSuccessEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
+import { safeDeferReply } from '../../utils/interaction.utils.js';
+export const setupServerCommand = {
+    data: new SlashCommandBuilder()
         .setName('setup-server')
         .setDescription('Automatically provision all Academy roles, categories, and channels with proper permissions'),
     async execute(interaction) {
-        const isAllowed = await (0, permissions_js_1.requireAdmin)(interaction);
+        const isAllowed = await requireAdmin(interaction);
         if (!isAllowed)
             return;
-        if (!(await (0, interaction_utils_js_1.safeDeferReply)(interaction, false)))
+        if (!(await safeDeferReply(interaction, false)))
             return;
         const guild = interaction.guild;
         if (!guild) {
@@ -22,8 +19,8 @@ exports.setupServerCommand = {
             return;
         }
         try {
-            const result = await server_setup_service_js_1.serverSetupService.setupGuild(guild);
-            const embed = (0, embed_builder_js_1.createSuccessEmbed)('Server Setup Completed!', `**Academy Discord Server Structure Provisioned Successfully!**\n\n` +
+            const result = await serverSetupService.setupGuild(guild);
+            const embed = createSuccessEmbed('Server Setup Completed!', `**Academy Discord Server Structure Provisioned Successfully!**\n\n` +
                 `• **Roles Checked/Created (${Object.keys(result.roles).length}):**\n` +
                 `  ${Object.keys(result.roles).map(k => `\`${k}\` (<@&${result.roles[k]}>)`).join('\n  ')}\n\n` +
                 `• **Channels Checked/Created (${Object.keys(result.channels).length}):**\n` +
@@ -34,7 +31,7 @@ exports.setupServerCommand = {
         }
         catch (error) {
             await interaction.editReply({
-                embeds: [(0, embed_builder_js_1.createErrorEmbed)('Setup Failed', error.message || 'Error occurred during automated setup.')],
+                embeds: [createErrorEmbed('Setup Failed', error.message || 'Error occurred during automated setup.')],
             });
         }
     },

@@ -1,15 +1,12 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkRateLimit = checkRateLimit;
-const discord_js_1 = require("discord.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
+import { Collection } from 'discord.js';
+import { createWarningEmbed } from '../../utils/embed-builder.js';
 // userId -> (commandName -> lastTimestamp)
-const cooldowns = new discord_js_1.Collection();
-function checkRateLimit(interaction, cooldownSeconds = 3) {
+const cooldowns = new Collection();
+export function checkRateLimit(interaction, cooldownSeconds = 3) {
     const userId = interaction.user.id;
     const commandName = interaction.commandName;
     if (!cooldowns.has(commandName)) {
-        cooldowns.set(commandName, new discord_js_1.Collection());
+        cooldowns.set(commandName, new Collection());
     }
     const timestamps = cooldowns.get(commandName);
     const now = Date.now();
@@ -19,7 +16,7 @@ function checkRateLimit(interaction, cooldownSeconds = 3) {
         if (now < expirationTime) {
             const timeLeft = Math.ceil((expirationTime - now) / 1000);
             interaction.reply({
-                embeds: [(0, embed_builder_js_1.createWarningEmbed)('Slow Down', `Please wait ${timeLeft} more second(s) before running \`/${commandName}\` again.`)],
+                embeds: [createWarningEmbed('Slow Down', `Please wait ${timeLeft} more second(s) before running \`/${commandName}\` again.`)],
                 ephemeral: true,
             });
             return false;

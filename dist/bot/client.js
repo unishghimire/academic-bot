@@ -1,81 +1,94 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createDiscordClient = createDiscordClient;
-exports.startBot = startBot;
-const discord_js_1 = require("discord.js");
-const env_js_1 = require("../config/env.js");
-const index_js_1 = require("./commands/index.js");
-const rate_limiter_js_1 = require("./middleware/rate-limiter.js");
-const error_logger_service_js_1 = require("../services/error-logger.service.js");
-const role_sync_job_js_1 = require("./jobs/role-sync.job.js");
-const expiry_check_job_js_1 = require("./jobs/expiry-check.job.js");
-const payment_sync_job_js_1 = require("./jobs/payment-sync.job.js");
-const deploy_commands_js_1 = require("./deploy-commands.js");
-const logger_js_1 = require("../utils/logger.js");
-const embed_builder_js_1 = require("../utils/embed-builder.js");
-const interaction_utils_js_1 = require("../utils/interaction.utils.js");
-function createDiscordClient() {
-    const client = new discord_js_1.Client({
+import { Client, GatewayIntentBits, Partials, Events, ActivityType, Options, } from 'discord.js';
+import { env } from '../config/env.js';
+import { commandMap } from './commands/index.js';
+import { checkRateLimit } from './middleware/rate-limiter.js';
+import { errorLogger } from '../services/error-logger.service.js';
+import { initRoleSyncJob } from './jobs/role-sync.job.js';
+import { initExpiryCheckJob } from './jobs/expiry-check.job.js';
+import { initPaymentSyncJob } from './jobs/payment-sync.job.js';
+import { deployCommands } from './deploy-commands.js';
+import { logger } from '../utils/logger.js';
+import { createErrorEmbed } from '../utils/embed-builder.js';
+import { isIgnorableInteractionError } from '../utils/interaction.utils.js';
+export function createDiscordClient() {
+    const client = new Client({
         intents: [
-            discord_js_1.GatewayIntentBits.Guilds,
-            discord_js_1.GatewayIntentBits.GuildMembers,
-            discord_js_1.GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMembers,
+            GatewayIntentBits.GuildMessages,
         ],
-        partials: [discord_js_1.Partials.GuildMember, discord_js_1.Partials.User],
+        partials: [Partials.GuildMember, Partials.User],
+        // Low-RAM optimizations to prevent Out Of Memory (Exit 137) on container hosts
+        makeCache: Options.cacheWithLimits({
+            MessageManager: 25, // Only retain last 25 messages per channel
+            PresenceManager: 0,
+            ReactionManager: 0,
+            ThreadManager: 0,
+            VoiceStateManager: 0,
+            AutoModerationRuleManager: 0,
+            GuildScheduledEventManager: 0,
+        }),
+        sweepers: {
+            ...Options.DefaultSweeperSettings,
+            messages: {
+                interval: 300, // Sweep every 5 minutes
+                lifetime: 600, // Evict messages older than 10 minutes
+            },
+        },
     });
-    client.once(discord_js_1.Events.ClientReady, async (readyClient) => {
-        logger_js_1.logger.info({ tag: readyClient.user.tag }, '🤖 Discord Custom Academy Bot is online and ready!');
+    client.once(Events.ClientReady, async (readyClient) => {
+        logger.info({ tag: readyClient.user.tag }, '🤖 Discord Custom Academy Bot is online and ready!');
         // Explicitly broadcast online presence
         readyClient.user.setPresence({
             status: 'online',
-            activities: [{ name: 'Academy Subscriptions | /verify-proof', type: discord_js_1.ActivityType.Watching }],
+            activities: [{ name: 'Academy Subscriptions | /verify-proof', type: ActivityType.Watching }],
         });
         // Automatically synchronize slash commands if running with live credentials
-        if (env_js_1.env.DISCORD_TOKEN !== 'mock_token') {
+        if (env.DISCORD_TOKEN !== 'mock_token') {
             try {
-                await (0, deploy_commands_js_1.deployCommands)();
+                await deployCommands();
             }
             catch (err) {
-                logger_js_1.logger.warn({ err }, 'Slash command auto-deployment on ready encountered an error');
+                logger.warn({ err }, 'Slash command auto-deployment on ready encountered an error');
             }
         }
         // Initialize scheduled cron and worker jobs
-        (0, role_sync_job_js_1.initRoleSyncJob)(client);
-        (0, expiry_check_job_js_1.initExpiryCheckJob)(client);
-        (0, payment_sync_job_js_1.initPaymentSyncJob)(client);
+        initRoleSyncJob(client);
+        initExpiryCheckJob(client);
+        initPaymentSyncJob(client);
     });
-    client.on(discord_js_1.Events.Error, error => {
-        logger_js_1.logger.error({ err: error }, 'Discord client encountered a network or websocket error');
+    client.on(Events.Error, error => {
+        logger.error({ err: error }, 'Discord client encountered a network or websocket error');
     });
-    client.on(discord_js_1.Events.InteractionCreate, async (interaction) => {
+    client.on(Events.InteractionCreate, async (interaction) => {
         if (!interaction.isChatInputCommand())
             return;
-        const command = index_js_1.commandMap.get(interaction.commandName);
+        const command = commandMap.get(interaction.commandName);
         if (!command) {
-            logger_js_1.logger.warn({ command: interaction.commandName }, 'Unknown command received');
+            logger.warn({ command: interaction.commandName }, 'Unknown command received');
             return;
         }
         // Check rate limit (3s cooldown by default)
-        if (!(0, rate_limiter_js_1.checkRateLimit)(interaction, 3)) {
+        if (!checkRateLimit(interaction, 3)) {
             return;
         }
         try {
             await command.execute(interaction);
         }
         catch (error) {
-            if ((0, interaction_utils_js_1.isIgnorableInteractionError)(error)) {
-                logger_js_1.logger.warn({ command: interaction.commandName, code: error?.code || error?.rawError?.code }, 'Interaction expired (>3s) or already handled by another instance (suppressed).');
+            if (isIgnorableInteractionError(error)) {
+                logger.warn({ command: interaction.commandName, code: error?.code || error?.rawError?.code }, 'Interaction expired (>3s) or already handled by another instance (suppressed).');
                 return;
             }
-            logger_js_1.logger.error({ err: error, command: interaction.commandName }, 'Error executing slash command');
-            await error_logger_service_js_1.errorLogger.report(client, {
+            logger.error({ err: error, command: interaction.commandName }, 'Error executing slash command');
+            await errorLogger.report(client, {
                 module: 'COMMAND_ROUTER',
                 action: interaction.commandName,
                 discordId: interaction.user.id,
                 error,
             });
             const errorReply = {
-                embeds: [(0, embed_builder_js_1.createErrorEmbed)('An Error Occurred', 'There was an error while executing this command. Staff has been notified.')],
+                embeds: [createErrorEmbed('An Error Occurred', 'There was an error while executing this command. Staff has been notified.')],
                 ephemeral: true,
             };
             if (interaction.deferred || interaction.replied) {
@@ -88,26 +101,26 @@ function createDiscordClient() {
     });
     return client;
 }
-async function startBot(client) {
-    const token = env_js_1.env.DISCORD_TOKEN?.trim().replace(/^["']|["']$/g, '');
+export async function startBot(client) {
+    const token = env.DISCORD_TOKEN?.trim().replace(/^["']|["']$/g, '');
     if (!token || token === 'mock_token') {
-        logger_js_1.logger.warn('⚠️ DISCORD_TOKEN is set to mock_token or empty. Discord bot login skipped for dev/mock mode. Set DISCORD_TOKEN in Render Environment Variables to bring bot online.');
+        logger.warn('⚠️ DISCORD_TOKEN is set to mock_token or empty. Discord bot login skipped for dev/mock mode. Set DISCORD_TOKEN in Render Environment Variables to bring bot online.');
         return;
     }
     try {
-        logger_js_1.logger.info('Attempting Discord client login...');
+        logger.info('Attempting Discord client login...');
         await client.login(token);
-        logger_js_1.logger.info('Discord client logged in successfully.');
+        logger.info('Discord client logged in successfully.');
     }
     catch (error) {
         if (error?.code === 'DisallowedIntents' || error?.message?.includes('disallowed intents')) {
-            logger_js_1.logger.fatal('❌ [CRITICAL DISCORD ERROR - DisallowedIntents]: You MUST enable "Server Members Intent" in the Discord Developer Portal (https://discord.com/developers/applications) under Bot -> Privileged Gateway Intents.');
+            logger.fatal('❌ [CRITICAL DISCORD ERROR - DisallowedIntents]: You MUST enable "Server Members Intent" in the Discord Developer Portal (https://discord.com/developers/applications) under Bot -> Privileged Gateway Intents.');
         }
         else if (error?.code === 'TokenInvalid' || error?.message?.includes('An invalid token was provided')) {
-            logger_js_1.logger.fatal('❌ [CRITICAL DISCORD ERROR - TokenInvalid]: DISCORD_TOKEN is invalid. Go to Discord Developer Portal -> Bot -> Click "Reset Token" and paste the new token in Render.');
+            logger.fatal('❌ [CRITICAL DISCORD ERROR - TokenInvalid]: DISCORD_TOKEN is invalid. Go to Discord Developer Portal -> Bot -> Click "Reset Token" and paste the new token in Render.');
         }
         else {
-            logger_js_1.logger.error({ err: error }, '❌ Failed to login to Discord');
+            logger.error({ err: error }, '❌ Failed to login to Discord');
         }
     }
 }

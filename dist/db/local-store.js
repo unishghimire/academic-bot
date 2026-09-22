@@ -1,19 +1,17 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.localStore = void 0;
-const fs_1 = __importDefault(require("fs"));
-const path_1 = __importDefault(require("path"));
-const DATA_DIR = path_1.default.join(process.cwd(), 'data');
-const DATA_FILE = path_1.default.join(DATA_DIR, 'local_storage.json');
+import fs from 'fs';
+import path from 'path';
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'local_storage.json');
+let cachedData = null;
 function ensureDataFile() {
+    if (cachedData) {
+        return cachedData;
+    }
     try {
-        if (!fs_1.default.existsSync(DATA_DIR)) {
-            fs_1.default.mkdirSync(DATA_DIR, { recursive: true });
+        if (!fs.existsSync(DATA_DIR)) {
+            fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        if (!fs_1.default.existsSync(DATA_FILE)) {
+        if (!fs.existsSync(DATA_FILE)) {
             const initialData = {
                 paymentMethods: [
                     {
@@ -44,28 +42,32 @@ function ensureDataFile() {
                 manualPayments: [],
                 auditLogs: [],
             };
-            fs_1.default.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
-            return initialData;
+            fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+            cachedData = initialData;
+            return cachedData;
         }
-        const content = fs_1.default.readFileSync(DATA_FILE, 'utf-8');
-        return JSON.parse(content);
+        const content = fs.readFileSync(DATA_FILE, 'utf-8');
+        cachedData = JSON.parse(content);
+        return cachedData;
     }
     catch {
-        return { paymentMethods: [], manualPayments: [], auditLogs: [] };
+        cachedData = { paymentMethods: [], manualPayments: [], auditLogs: [] };
+        return cachedData;
     }
 }
 function saveData(data) {
+    cachedData = data;
     try {
-        if (!fs_1.default.existsSync(DATA_DIR)) {
-            fs_1.default.mkdirSync(DATA_DIR, { recursive: true });
+        if (!fs.existsSync(DATA_DIR)) {
+            fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs_1.default.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+        fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
     }
     catch (err) {
         console.error('Failed to save local JSON storage:', err);
     }
 }
-exports.localStore = {
+export const localStore = {
     // Payment Methods
     getPaymentMethods(onlyActive = false) {
         const data = ensureDataFile();
@@ -255,6 +257,37 @@ exports.localStore = {
             return true;
         }
         return false;
+    },
+    // Expiry Warnings & Notices Tracking
+    hasWarningBeenSent(userId, expiresAt) {
+        const data = ensureDataFile();
+        const warnings = data.warningsSent || {};
+        const key = `warning_3d:${userId}:${new Date(expiresAt).toISOString().split('T')[0]}`;
+        return Boolean(warnings[key]);
+    },
+    markWarningSent(userId, expiresAt) {
+        const data = ensureDataFile();
+        if (!data.warningsSent)
+            data.warningsSent = {};
+        const key = `warning_3d:${userId}:${new Date(expiresAt).toISOString().split('T')[0]}`;
+        data.warningsSent[key] = new Date().toISOString();
+        saveData(data);
+    },
+    hasExpiredNoticeBeenSent(userId, expiresAt) {
+        const data = ensureDataFile();
+        const warnings = data.warningsSent || {};
+        const dateStr = expiresAt ? new Date(expiresAt).toISOString().split('T')[0] : 'general';
+        const key = `expired_notice:${userId}:${dateStr}`;
+        return Boolean(warnings[key]);
+    },
+    markExpiredNoticeSent(userId, expiresAt) {
+        const data = ensureDataFile();
+        if (!data.warningsSent)
+            data.warningsSent = {};
+        const dateStr = expiresAt ? new Date(expiresAt).toISOString().split('T')[0] : 'general';
+        const key = `expired_notice:${userId}:${dateStr}`;
+        data.warningsSent[key] = new Date().toISOString();
+        saveData(data);
     }
 };
 //# sourceMappingURL=local-store.js.map

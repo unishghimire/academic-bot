@@ -1,22 +1,19 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createProgressRouter = createProgressRouter;
-const express_1 = require("express");
-const auth_js_1 = require("../middleware/auth.js");
-const progress_service_js_1 = require("../../services/progress.service.js");
-const role_sync_service_js_1 = require("../../services/role-sync.service.js");
-const error_logger_service_js_1 = require("../../services/error-logger.service.js");
-const env_js_1 = require("../../config/env.js");
-const embed_builder_js_1 = require("../../utils/embed-builder.js");
-const client_js_1 = require("../../db/client.js");
-function createProgressRouter(discordClient) {
-    const router = (0, express_1.Router)();
+import { Router } from 'express';
+import { requireAcademyAuth } from '../middleware/auth.js';
+import { progressService } from '../../services/progress.service.js';
+import { roleSyncService } from '../../services/role-sync.service.js';
+import { errorLogger } from '../../services/error-logger.service.js';
+import { env } from '../../config/env.js';
+import { createTierEmbed } from '../../utils/embed-builder.js';
+import { prisma } from '../../db/client.js';
+export function createProgressRouter(discordClient) {
+    const router = Router();
     // Website video player reports watch percentage
-    router.post('/watch', auth_js_1.requireAcademyAuth, async (req, res) => {
+    router.post('/watch', requireAcademyAuth, async (req, res) => {
         const { userId, discordId, lessonId, watchPercent } = req.body;
         let targetUserId = userId;
         if (!targetUserId && discordId) {
-            const user = await client_js_1.prisma.user.findUnique({ where: { discordId } });
+            const user = await prisma.user.findUnique({ where: { discordId } });
             if (user)
                 targetUserId = user.id;
         }
@@ -25,14 +22,14 @@ function createProgressRouter(discordClient) {
             return;
         }
         try {
-            const result = await progress_service_js_1.progressService.updateWatchProgress(targetUserId, lessonId, watchPercent);
+            const result = await progressService.updateWatchProgress(targetUserId, lessonId, watchPercent);
             // If completing this lesson unlocked a new tier, announce and sync roles
             if (result.tierUnlocked && discordClient) {
-                await role_sync_service_js_1.roleSyncService.syncUserRoles(userId, discordClient).catch(() => { });
-                if (env_js_1.env.CHANNEL_ANNOUNCEMENTS) {
-                    const channel = await discordClient.channels.fetch(env_js_1.env.CHANNEL_ANNOUNCEMENTS).catch(() => null);
+                await roleSyncService.syncUserRoles(userId, discordClient).catch(() => { });
+                if (env.CHANNEL_ANNOUNCEMENTS) {
+                    const channel = await discordClient.channels.fetch(env.CHANNEL_ANNOUNCEMENTS).catch(() => null);
                     if (channel && channel.isTextBased()) {
-                        const embed = (0, embed_builder_js_1.createTierEmbed)(result.tierUnlocked, `🎉 Congratulations to student <@${result.userId}> for unlocking **Tier ${result.tierUnlocked}**!`);
+                        const embed = createTierEmbed(result.tierUnlocked, `🎉 Congratulations to student <@${result.userId}> for unlocking **Tier ${result.tierUnlocked}**!`);
                         await channel.send({ embeds: [embed] }).catch(() => { });
                     }
                 }
@@ -43,7 +40,7 @@ function createProgressRouter(discordClient) {
             });
         }
         catch (err) {
-            await error_logger_service_js_1.errorLogger.report(discordClient ?? null, {
+            await errorLogger.report(discordClient ?? null, {
                 module: 'PROGRESS_API',
                 action: 'UPDATE_WATCH_PROGRESS',
                 userId,
