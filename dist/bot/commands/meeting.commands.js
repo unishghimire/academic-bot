@@ -13,7 +13,6 @@ export const meetingCommand = {
         .setName('schedule')
         .setDescription('Schedule a new live class or subscriber meeting (Staff only)')
         .addStringOption(opt => opt.setName('title').setDescription('Meeting title (e.g. Weekly Strategy Call)').setRequired(true))
-        .addStringOption(opt => opt.setName('topic').setDescription('Agenda or topics covered').setRequired(true))
         .addStringOption(opt => opt
         .setName('datetime')
         .setDescription('Date & Time (e.g. 2026-09-15 18:00 UTC or YYYY-MM-DD HH:mm)')
@@ -22,7 +21,8 @@ export const meetingCommand = {
         .setName('category')
         .setDescription('Category where voice channel will be auto-created')
         .addChannelTypes(ChannelType.GuildCategory)
-        .setRequired(false))
+        .setRequired(true))
+        .addStringOption(opt => opt.setName('topic').setDescription('Agenda or topics covered (optional)').setRequired(false))
         .addStringOption(opt => opt
         .setName('meeting_url')
         .setDescription('Custom link if using external Zoom/Meet (optional)')
@@ -50,9 +50,9 @@ export const meetingCommand = {
             if (!(await safeDeferReply(interaction, true)))
                 return;
             const title = interaction.options.getString('title', true);
-            const topic = interaction.options.getString('topic', true);
             const dateStr = interaction.options.getString('datetime', true);
-            const category = interaction.options.getChannel('category');
+            const category = interaction.options.getChannel('category', true);
+            const topic = interaction.options.getString('topic') || title;
             const meetingUrl = interaction.options.getString('meeting_url') || '🔊 Auto-Created Voice Channel';
             let reminderRole = interaction.options.getRole('role');
             // Default ping role to Elite role if not specified
@@ -76,20 +76,20 @@ export const meetingCommand = {
                     scheduledAt: scheduledDate,
                     channelUrl: meetingUrl,
                     reminderRole: reminderRole ? reminderRole.id : null,
-                    categoryId: category ? category.id : null,
-                    categoryName: category ? category.name : null,
+                    categoryId: category.id,
+                    categoryName: category.name,
                     targetChannelId: interaction.channelId,
                 });
                 const unixTimestamp = Math.floor(scheduledDate.getTime() / 1000);
                 const roleMention = reminderRole ? `<@&${reminderRole.id}>` : null;
-                // Try to announce in #welcome or #announcements or current channel
+                // Try to announce in #welcome or current channel
                 const guild = interaction.guild;
                 if (guild) {
                     const channels = await guild.channels.fetch();
                     const targetChannel = (channels.find(c => c && (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()) || interaction.channel);
                     const announcementEmbed = createInfoEmbed(`📅 New Meeting Scheduled: ${title}`, `**Topic:** ${topic}\n\n` +
                         `🕒 **When:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
-                        `🔊 **Voice Channel:** ${category ? `Will auto-open in category **${category.name}**` : 'Will auto-open in server when live'}\n` +
+                        `🔊 **Voice Channel:** Auto-opens in category **${category.name}** when live\n` +
                         (meetingUrl !== '🔊 Auto-Created Voice Channel' ? `🔗 **Direct Link:** [Join Meeting](${meetingUrl})\n` : '') +
                         (roleMention ? `👥 **Audience:** ${roleMention}\n` : '') +
                         `\n*Meeting ID:* \`${meeting.id}\``);
@@ -105,9 +105,9 @@ export const meetingCommand = {
                         createSuccessEmbed('Meeting Scheduled! 📅', `Successfully scheduled **${title}**!\n\n` +
                             `• **ID:** \`${meeting.id}\`\n` +
                             `• **Date & Time:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
-                            (category ? `• **Auto Voice Category:** ${category.name}\n` : '') +
+                            `• **Voice Channel Category:** ${category.name}\n` +
                             (reminderRole ? `• **Notified Role:** <@&${reminderRole.id}>\n` : '') +
-                            `\n⚡ *When the scheduled time arrives, the bot will automatically create the voice channel and broadcast the live link!*`),
+                            `\n⚡ *When the scheduled time arrives, the bot will automatically create the voice channel in "${category.name}" and broadcast the live link!*`),
                     ],
                 });
             }

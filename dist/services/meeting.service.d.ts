@@ -1,7 +1,7 @@
 import { PrismaClient, LiveClass } from '@prisma/client';
 export interface ScheduleMeetingInput {
     title: string;
-    topic: string;
+    topic?: string;
     scheduledAt: Date;
     channelUrl?: string;
     reminderRole?: string | null;

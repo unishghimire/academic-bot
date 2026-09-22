@@ -13,14 +13,15 @@ export class MeetingService {
      * Schedule a new meeting/class with optional category for automated voice channel creation
      */
     async scheduleMeeting(input) {
-        if (!input.title || !input.topic || !input.scheduledAt) {
-            throw new Error('Title, topic, date/time, and meeting URL are required.');
+        if (!input.title || !input.scheduledAt) {
+            throw new Error('Title and date/time are required to schedule a meeting.');
         }
         const meetingUrl = input.channelUrl?.trim() || 'Auto Voice Channel';
+        const topic = input.topic?.trim() || input.title.trim();
         const meetingData = {
             id: `meet_${Date.now()}`,
             title: input.title.trim(),
-            topic: input.topic.trim(),
+            topic,
             scheduledAt: input.scheduledAt,
             channelUrl: meetingUrl,
             reminderRole: input.reminderRole ? input.reminderRole.trim() : null,

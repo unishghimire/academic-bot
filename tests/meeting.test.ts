@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MeetingService } from '../src/services/meeting.service.js';
 
 describe('MeetingService — Meeting Scheduling & Access', () => {
-  it('schedules a new meeting with title, topic, datetime, and channelUrl', async () => {
+  it('schedules a new meeting with title, optional topic, category, datetime, and channelUrl', async () => {
     const scheduledDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const mockDb: any = {
       liveClass: {
@@ -14,30 +14,32 @@ describe('MeetingService — Meeting Scheduling & Access', () => {
 
     const meeting = await service.scheduleMeeting({
       title: 'Weekly Live Q&A Strategy Call',
-      topic: 'Live feedback on student video ads and scaling hooks',
       scheduledAt: scheduledDate,
       channelUrl: 'https://meet.google.com/abc-defg-hij',
       reminderRole: '100000000000000002',
+      categoryId: '123456789012345678',
+      categoryName: 'Classes',
     });
 
     expect(meeting.id).toBe('meet_123');
     expect(meeting.title).toBe('Weekly Live Q&A Strategy Call');
+    expect(meeting.topic).toBe('Weekly Live Q&A Strategy Call'); // defaulted from title
     expect(meeting.channelUrl).toBe('https://meet.google.com/abc-defg-hij');
     expect(meeting.reminderRole).toBe('100000000000000002');
+    expect((meeting as any).categoryId).toBe('123456789012345678');
+    expect((meeting as any).categoryName).toBe('Classes');
     expect(mockDb.liveClass.create).toHaveBeenCalled();
   });
 
-  it('rejects scheduling if title, topic, datetime, or url is missing', async () => {
+  it('rejects scheduling if title or datetime is missing', async () => {
     const service = new MeetingService({} as any);
 
     await expect(
       service.scheduleMeeting({
         title: '',
-        topic: 'Valid topic',
         scheduledAt: new Date(),
-        channelUrl: 'https://zoom.us/j/1234',
       })
-    ).rejects.toThrow('Title, topic, date/time, and meeting URL are required.');
+    ).rejects.toThrow('Title and date/time are required to schedule a meeting.');
   });
 
   it('lists upcoming scheduled meetings ordered by scheduledAt', async () => {
