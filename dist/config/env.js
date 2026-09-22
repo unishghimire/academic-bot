@@ -3,7 +3,7 @@ import { z } from 'zod';
 dotenv.config();
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    PORT: z.coerce.number().default(3000),
+    PORT: z.coerce.number().default(Number(process.env.PORT || process.env.SERVER_PORT || 3000)),
     // Database
     DATABASE_URL: z.string().default('postgresql://postgres:postgres@localhost:5432/academy?schema=public'),
     // Discord Credentials

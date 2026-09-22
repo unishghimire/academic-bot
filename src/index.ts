@@ -22,6 +22,10 @@ async function main() {
     }
   });
 
+  server.on('error', (err: any) => {
+    logger.warn({ err: err.message }, 'Web API port bind notice (Discord bot operation continues unaffected)');
+  });
+
   // 3. Automated 24/7 Keep-Alive Self-Pinger for Render / Cloud Hosts
   const keepAliveTarget = env.RENDER_EXTERNAL_URL || env.APP_URL;
   if (keepAliveTarget) {

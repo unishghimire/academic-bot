@@ -18,6 +18,9 @@ async function main() {
             logger.info(`📡 Stripe Webhook: http://0.0.0.0:${env.PORT}/webhooks/stripe`);
         }
     });
+    server.on('error', (err) => {
+        logger.warn({ err: err.message }, 'Web API port bind notice (Discord bot operation continues unaffected)');
+    });
     // 3. Automated 24/7 Keep-Alive Self-Pinger for Render / Cloud Hosts
     const keepAliveTarget = env.RENDER_EXTERNAL_URL || env.APP_URL;
     if (keepAliveTarget) {
