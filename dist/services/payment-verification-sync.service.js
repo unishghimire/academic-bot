@@ -7,6 +7,7 @@ import { env } from '../config/env.js';
 import { COLORS, EMBED_FOOTER } from '../config/constants.js';
 import { logger } from '../utils/logger.js';
 import { auditService } from './audit.service.js';
+import { resolveAnnouncementChannel } from '../utils/channel.utils.js';
 export class PaymentVerificationSyncService {
     /**
      * Sweeps the database for approved payment verifications and grants Discord roles to users
@@ -296,7 +297,7 @@ export class PaymentVerificationSyncService {
         }
         // 2. Post welcoming announcement in welcome channel
         try {
-            const welcomeChannel = member.guild.channels.cache.find(c => (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased());
+            const welcomeChannel = await resolveAnnouncementChannel(member.guild);
             if (welcomeChannel) {
                 const publicEmbed = new EmbedBuilder()
                     .setTitle('🎓 New Elite Member Welcomed!')

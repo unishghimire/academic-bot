@@ -12,6 +12,8 @@ import { meetingService } from '../../services/meeting.service.js';
 import { env } from '../../config/env.js';
 import { COLORS, EMBED_FOOTER } from '../../config/constants.js';
 import { logger } from '../../utils/logger.js';
+import { resolveAnnouncementChannel } from '../../utils/channel.utils.js';
+import { resolveEliteRole } from '../../utils/role.utils.js';
 
 /**
  * Checks for scheduled meetings that have reached their scheduled start time,
@@ -53,27 +55,13 @@ export async function runMeetingLiveCheck(client: Client): Promise<void> {
           ? `https://discord.com/channels/${guild.id}/${voiceChannel.id}`
           : (meeting.channelUrl && !meeting.channelUrl.startsWith('🔊') ? meeting.channelUrl : null);
 
-        // 2. Determine target channel for live announcement (prefer #welcome or targetChannelId)
-        let announcementChannel: TextChannel | null = null;
-        if (meeting.targetChannelId) {
-          const target = guild.channels.cache.get(meeting.targetChannelId);
-          if (target && target.isTextBased()) announcementChannel = target as TextChannel;
-        }
-
-        if (!announcementChannel) {
-          const allChannels = Array.from(guild.channels.cache.values() as any) as any[];
-          announcementChannel = (allChannels.find(
-            c => c && (c.name?.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && (typeof c.isTextBased === 'function' ? c.isTextBased() : true)
-          ) || null) as TextChannel | null;
-        }
+        // 2. Determine target channel for live announcement
+        const announcementChannel = await resolveAnnouncementChannel(guild, meeting.targetChannelId);
 
         // 3. Resolve role mention (defaults to @Elite)
         let roleMention = meeting.reminderRole ? `<@&${meeting.reminderRole}>` : null;
         if (!roleMention) {
-          const allRoles = Array.from(guild.roles.cache.values() as any) as any[];
-          const eliteRole = allRoles.find(
-            r => r && (r.name?.toLowerCase() === 'elite' || r.id === env.ROLE_ELITE)
-          );
+          const eliteRole = resolveEliteRole(guild);
           if (eliteRole) roleMention = `<@&${eliteRole.id}>`;
         }
 

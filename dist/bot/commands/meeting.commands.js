@@ -4,7 +4,8 @@ import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createInfoEmbed, createWarningEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { logger } from '../../utils/logger.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
-import { env } from '../../config/env.js';
+import { resolveAnnouncementChannel } from '../../utils/channel.utils.js';
+import { resolveEliteRole } from '../../utils/role.utils.js';
 export const meetingCommand = {
     data: new SlashCommandBuilder()
         .setName('meeting')
@@ -22,6 +23,11 @@ export const meetingCommand = {
         .setDescription('Category where voice channel will be auto-created')
         .addChannelTypes(ChannelType.GuildCategory)
         .setRequired(true))
+        .addChannelOption(opt => opt
+        .setName('announcement_channel')
+        .setDescription('Text channel to post announcement (defaults to #welcome or #announcements)')
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false))
         .addStringOption(opt => opt.setName('topic').setDescription('Agenda or topics covered (optional)').setRequired(false))
         .addStringOption(opt => opt
         .setName('meeting_url')
@@ -52,12 +58,13 @@ export const meetingCommand = {
             const title = interaction.options.getString('title', true);
             const dateStr = interaction.options.getString('datetime', true);
             const category = interaction.options.getChannel('category', true);
+            const customChannel = interaction.options.getChannel('announcement_channel');
             const topic = interaction.options.getString('topic') || title;
             const meetingUrl = interaction.options.getString('meeting_url') || '🔊 Auto-Created Voice Channel';
             let reminderRole = interaction.options.getRole('role');
             // Default ping role to Elite role if not specified
             if (!reminderRole && interaction.guild) {
-                reminderRole = interaction.guild.roles.cache.find(r => r.name.toLowerCase() === 'elite' || r.id === env.ROLE_ELITE) || null;
+                reminderRole = resolveEliteRole(interaction.guild);
             }
             // Parse date
             const scheduledDate = new Date(dateStr);
@@ -69,6 +76,14 @@ export const meetingCommand = {
                 });
                 return;
             }
+            // Resolve announcement channel (custom channel -> #welcome -> #announcements -> current channel)
+            let targetChannel = null;
+            if (interaction.guild) {
+                targetChannel = await resolveAnnouncementChannel(interaction.guild, customChannel?.id);
+            }
+            if (!targetChannel && interaction.channel && interaction.channel.isTextBased()) {
+                targetChannel = interaction.channel;
+            }
             try {
                 const meeting = await meetingService.scheduleMeeting({
                     title,
@@ -78,26 +93,31 @@ export const meetingCommand = {
                     reminderRole: reminderRole ? reminderRole.id : null,
                     categoryId: category.id,
                     categoryName: category.name,
-                    targetChannelId: interaction.channelId,
+                    targetChannelId: targetChannel ? targetChannel.id : interaction.channelId,
                 });
                 const unixTimestamp = Math.floor(scheduledDate.getTime() / 1000);
                 const roleMention = reminderRole ? `<@&${reminderRole.id}>` : null;
-                // Try to announce in #welcome or current channel
-                const guild = interaction.guild;
-                if (guild) {
-                    const channels = await guild.channels.fetch();
-                    const targetChannel = (channels.find(c => c && (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()) || interaction.channel);
+                // Post announcement to target channel
+                let announcementPosted = false;
+                let announcementError = null;
+                if (targetChannel && typeof targetChannel.send === 'function') {
                     const announcementEmbed = createInfoEmbed(`📅 New Meeting Scheduled: ${title}`, `**Topic:** ${topic}\n\n` +
                         `🕒 **When:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
                         `🔊 **Voice Channel:** Auto-opens in category **${category.name}** when live\n` +
                         (meetingUrl !== '🔊 Auto-Created Voice Channel' ? `🔗 **Direct Link:** [Join Meeting](${meetingUrl})\n` : '') +
                         (roleMention ? `👥 **Audience:** ${roleMention}\n` : '') +
                         `\n*Meeting ID:* \`${meeting.id}\``);
-                    if (targetChannel && targetChannel.isTextBased()) {
+                    try {
                         await targetChannel.send({
                             content: roleMention ? `📢 ${roleMention} — New class/meeting scheduled!` : undefined,
                             embeds: [announcementEmbed],
-                        }).catch(err => logger.warn({ err }, 'Could not post meeting announcement'));
+                        });
+                        announcementPosted = true;
+                        logger.info({ channelId: targetChannel.id, title }, 'Meeting announcement posted successfully');
+                    }
+                    catch (postErr) {
+                        announcementError = postErr?.message || 'Permission denied or send failed';
+                        logger.warn({ err: postErr, channelId: targetChannel.id }, 'Could not post meeting announcement');
                     }
                 }
                 await interaction.editReply({
@@ -106,8 +126,13 @@ export const meetingCommand = {
                             `• **ID:** \`${meeting.id}\`\n` +
                             `• **Date & Time:** <t:${unixTimestamp}:F> (<t:${unixTimestamp}:R>)\n` +
                             `• **Voice Channel Category:** ${category.name}\n` +
+                            (announcementPosted && targetChannel
+                                ? `• **📢 Announced In:** <#${targetChannel.id}>\n`
+                                : targetChannel
+                                    ? `• ⚠️ **Announcement Status:** Could not post to <#${targetChannel.id}> (${announcementError})\n`
+                                    : '') +
                             (reminderRole ? `• **Notified Role:** <@&${reminderRole.id}>\n` : '') +
-                            `\n⚡ *When the scheduled time arrives, the bot will automatically create the voice channel in "${category.name}" and broadcast the live link!*`),
+                            `\n⚡ *When the scheduled time arrives (<t:${unixTimestamp}:R>), the bot will automatically create the voice channel in "${category.name}" and broadcast the live link!*`),
                     ],
                 });
             }

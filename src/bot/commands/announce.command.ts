@@ -11,6 +11,7 @@ import { auditService } from '../../services/audit.service.js';
 import { COLORS, EMBED_FOOTER } from '../../config/constants.js';
 import { env } from '../../config/env.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
+import { resolveAnnouncementChannel } from '../../utils/channel.utils.js';
 
 export const announceCommand = {
   data: new SlashCommandBuilder()
@@ -53,12 +54,13 @@ export const announceCommand = {
       return;
     }
 
-    // Determine target channel (chosenChannel -> #welcome -> currentChannel)
+    // Determine target channel (chosenChannel -> resolveAnnouncementChannel -> currentChannel)
     let targetChannel: TextChannel | null = chosenChannel;
     if (!targetChannel) {
-      targetChannel = (guild.channels.cache.find(
-        c => (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()
-      ) || interaction.channel) as TextChannel | null;
+      targetChannel = await resolveAnnouncementChannel(guild);
+      if (!targetChannel && interaction.channel && interaction.channel.isTextBased()) {
+        targetChannel = interaction.channel as TextChannel;
+      }
     }
 
     if (!targetChannel || !targetChannel.isTextBased()) {

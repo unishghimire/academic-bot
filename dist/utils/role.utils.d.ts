@@ -5,3 +5,7 @@ import { Guild, Role } from 'discord.js';
  * 2. Fallback to matching by case-insensitive name if ID is from another server
  */
 export declare function resolveGuildRole(guild: Guild, envId?: string, nameFallback?: string): Role | null;
+/**
+ * Resolves the Elite subscription role in the guild (matches @Elite or @💎 ELITE)
+ */
+export declare function resolveEliteRole(guild: Guild, preferredRoleId?: string | null): Role | null;

@@ -16,6 +16,7 @@ import { env } from '../config/env.js';
 import { COLORS, EMBED_FOOTER, TIER_LEVELS } from '../config/constants.js';
 import { logger } from '../utils/logger.js';
 import { auditService } from './audit.service.js';
+import { resolveAnnouncementChannel } from '../utils/channel.utils.js';
 
 export interface SyncResult {
   totalFound: number;
@@ -367,9 +368,7 @@ export class PaymentVerificationSyncService {
 
     // 2. Post welcoming announcement in welcome channel
     try {
-      const welcomeChannel = member.guild.channels.cache.find(
-        c => (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()
-      ) as TextChannel | undefined;
+      const welcomeChannel = await resolveAnnouncementChannel(member.guild);
 
       if (welcomeChannel) {
         const publicEmbed = new EmbedBuilder()

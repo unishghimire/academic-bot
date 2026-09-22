@@ -3,8 +3,8 @@ import { requireInstructor } from '../middleware/permissions.js';
 import { createSuccessEmbed, createErrorEmbed } from '../../utils/embed-builder.js';
 import { auditService } from '../../services/audit.service.js';
 import { COLORS, EMBED_FOOTER } from '../../config/constants.js';
-import { env } from '../../config/env.js';
 import { safeDeferReply } from '../../utils/interaction.utils.js';
+import { resolveAnnouncementChannel } from '../../utils/channel.utils.js';
 export const announceCommand = {
     data: new SlashCommandBuilder()
         .setName('announce')
@@ -35,10 +35,13 @@ export const announceCommand = {
             await interaction.editReply('This command can only be used inside the server.');
             return;
         }
-        // Determine target channel (chosenChannel -> #welcome -> currentChannel)
+        // Determine target channel (chosenChannel -> resolveAnnouncementChannel -> currentChannel)
         let targetChannel = chosenChannel;
         if (!targetChannel) {
-            targetChannel = (guild.channels.cache.find(c => (c.name.toLowerCase() === 'welcome' || c.id === env.CHANNEL_WELCOME) && c.isTextBased()) || interaction.channel);
+            targetChannel = await resolveAnnouncementChannel(guild);
+            if (!targetChannel && interaction.channel && interaction.channel.isTextBased()) {
+                targetChannel = interaction.channel;
+            }
         }
         if (!targetChannel || !targetChannel.isTextBased()) {
             await interaction.editReply({
