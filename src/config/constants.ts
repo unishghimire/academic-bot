@@ -17,18 +17,13 @@ export const COMPLETION_THRESHOLDS = {
 } as const;
 
 export const TIER_LEVELS = {
-  TIER_1: 1,
-  TIER_2: 2,
-  TIER_3: 3,
-  GRADUATE: 4,
+  ELITE: 1,
+  TIER_1: 1, // Backward compatibility alias
 } as const;
 
 export const ROLE_KEYS = {
   PREMIUM: 'ROLE_PREMIUM',
-  TIER_1: 'ROLE_TIER_1',
-  TIER_2: 'ROLE_TIER_2',
-  TIER_3: 'ROLE_TIER_3',
-  GRADUATE: 'ROLE_GRADUATE',
+  ELITE: 'ROLE_ELITE',
   INSTRUCTOR: 'ROLE_INSTRUCTOR',
   ADMIN: 'ROLE_ADMIN',
 } as const;

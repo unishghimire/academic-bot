@@ -96,10 +96,6 @@ export class PaymentVerificationSyncService {
                     const managedRoles = [
                         env.ROLE_ELITE,
                         env.ROLE_PREMIUM,
-                        env.ROLE_TIER_1,
-                        env.ROLE_TIER_2,
-                        env.ROLE_TIER_3,
-                        env.ROLE_GRADUATE,
                     ].filter((r) => Boolean(r));
                     const rolesToRemove = managedRoles.filter(r => member.roles.cache.has(r));
                     if (rolesToRemove.length > 0) {
@@ -130,15 +126,9 @@ export class PaymentVerificationSyncService {
                 if (eliteRoleId && !member.roles.cache.has(eliteRoleId)) {
                     rolesToAdd.push(eliteRoleId);
                 }
-                // Clean up any deprecated tier roles if present
-                const deprecatedRoles = [
-                    env.ROLE_TIER_1,
-                    env.ROLE_TIER_2,
-                    env.ROLE_TIER_3,
-                    env.ROLE_GRADUATE,
-                ].filter((r) => Boolean(r));
-                const legacyToRemove = deprecatedRoles.filter(r => member.roles.cache.has(r));
-                if (legacyToRemove.length > 0) {
+                // Clean up any legacy tier roles if found in guild
+                const legacyToRemove = member.roles.cache.filter(r => ['tier-1', 'tier-2', 'tier-3', 'graduate'].includes(r.name.toLowerCase()));
+                if (legacyToRemove.size > 0) {
                     await member.roles.remove(legacyToRemove).catch(() => { });
                 }
                 if (rolesToAdd.length > 0) {

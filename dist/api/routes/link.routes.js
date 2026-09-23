@@ -21,7 +21,7 @@ export function createLinkRouter(discordClient) {
                     const user = await discordClient.users.fetch(result.discordId);
                     if (user) {
                         const embed = createSuccessEmbed('Academy Account Linked!', `Your Discord account has been successfully verified and connected to **${email}**.\n\n` +
-                            `Your Premium & Tier roles have been synchronized. Use \`/subscription\` to view your membership, or \`/continue\` to jump straight into your lessons!`);
+                            `Your Elite role has been synchronized. Use \`/subscription\` to view your membership, or \`/continue\` to jump straight into your lessons!`);
                         await user.send({ embeds: [embed] }).catch(() => { });
                     }
                 }

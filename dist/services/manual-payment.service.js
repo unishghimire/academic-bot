@@ -264,7 +264,7 @@ export class ManualPaymentService {
                 action: 'MANUAL_PAYMENT_APPROVED',
                 targetType: 'MANUAL_PAYMENT',
                 targetId: paymentId,
-                reason: params.notes || `Manual payment of $${payment.amount} approved for ${durationDays} days (Tier ${tier})`,
+                reason: params.notes || `Manual payment of ${payment.amount} approved for ${durationDays} days (Elite Access)`,
                 before: { status: payment.status },
                 after: {
                     status: ManualPaymentStatus.APPROVED,

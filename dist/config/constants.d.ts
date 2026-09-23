@@ -14,17 +14,12 @@ export declare const COMPLETION_THRESHOLDS: {
     readonly QUIZ_PASSING_PERCENT: 80;
 };
 export declare const TIER_LEVELS: {
+    readonly ELITE: 1;
     readonly TIER_1: 1;
-    readonly TIER_2: 2;
-    readonly TIER_3: 3;
-    readonly GRADUATE: 4;
 };
 export declare const ROLE_KEYS: {
     readonly PREMIUM: "ROLE_PREMIUM";
-    readonly TIER_1: "ROLE_TIER_1";
-    readonly TIER_2: "ROLE_TIER_2";
-    readonly TIER_3: "ROLE_TIER_3";
-    readonly GRADUATE: "ROLE_GRADUATE";
+    readonly ELITE: "ROLE_ELITE";
     readonly INSTRUCTOR: "ROLE_INSTRUCTOR";
     readonly ADMIN: "ROLE_ADMIN";
 };

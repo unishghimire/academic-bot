@@ -39,7 +39,7 @@ export function createProgressRouter(discordClient?: Client | null): Router {
           if (channel && channel.isTextBased()) {
             const embed = createTierEmbed(
               result.tierUnlocked,
-              `🎉 Congratulations to student <@${result.userId}> for unlocking **Tier ${result.tierUnlocked}**!`
+              `🎉 Congratulations to student <@${result.userId}> for activating **Elite Access**!`
             );
             await (channel as TextChannel).send({ embeds: [embed] }).catch(() => {});
           }

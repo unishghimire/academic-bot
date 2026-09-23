@@ -29,7 +29,7 @@ export function createProgressRouter(discordClient) {
                 if (env.CHANNEL_ANNOUNCEMENTS) {
                     const channel = await discordClient.channels.fetch(env.CHANNEL_ANNOUNCEMENTS).catch(() => null);
                     if (channel && channel.isTextBased()) {
-                        const embed = createTierEmbed(result.tierUnlocked, `🎉 Congratulations to student <@${result.userId}> for unlocking **Tier ${result.tierUnlocked}**!`);
+                        const embed = createTierEmbed(result.tierUnlocked, `🎉 Congratulations to student <@${result.userId}> for activating **Elite Access**!`);
                         await channel.send({ embeds: [embed] }).catch(() => { });
                     }
                 }
