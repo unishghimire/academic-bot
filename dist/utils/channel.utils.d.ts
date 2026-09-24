@@ -9,3 +9,13 @@ import { Guild, TextChannel } from 'discord.js';
  * 6. Fuzzy match: Any text channel whose name contains 'general'
  */
 export declare function resolveAnnouncementChannel(guild: Guild, preferredChannelId?: string | null): Promise<TextChannel | null>;
+/**
+ * Robustly resolves the Discipline / Motivation text channel (#🗿・discipline):
+ * 1. Checks specific preferred/passed channel ID
+ * 2. Checks env.CHANNEL_DISCIPLINE if configured and exists in guild
+ * 3. Checks env.CHANNEL_MOTIVATION if configured and exists in guild
+ * 4. Fuzzy match: Any text channel containing 'discipline' (e.g. 🗿・discipline)
+ * 5. Fuzzy match: Any text channel containing 'motivation' (e.g. daily-motivation)
+ * 6. Fallback: resolveAnnouncementChannel(guild)
+ */
+export declare function resolveDisciplineChannel(guild: Guild, preferredChannelId?: string | null): Promise<TextChannel | null>;

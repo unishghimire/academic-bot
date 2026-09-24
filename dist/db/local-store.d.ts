@@ -34,4 +34,12 @@ export declare const localStore: {
     markWarningSent(userId: string, expiresAt: Date | string): void;
     hasExpiredNoticeBeenSent(userId: string, expiresAt?: Date | string | null): boolean;
     markExpiredNoticeSent(userId: string, expiresAt?: Date | string | null): void;
+    getMotivationState(): {
+        lastIndex: number;
+        lastSentAt?: string;
+    };
+    setMotivationState(state: {
+        lastIndex: number;
+        lastSentAt?: string;
+    }): void;
 };

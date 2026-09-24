@@ -288,6 +288,16 @@ export const localStore = {
         const key = `expired_notice:${userId}:${dateStr}`;
         data.warningsSent[key] = new Date().toISOString();
         saveData(data);
+    },
+    // Hourly Motivation State Tracking
+    getMotivationState() {
+        const data = ensureDataFile();
+        return data.motivationState || { lastIndex: -1 };
+    },
+    setMotivationState(state) {
+        const data = ensureDataFile();
+        data.motivationState = state;
+        saveData(data);
     }
 };
 //# sourceMappingURL=local-store.js.map

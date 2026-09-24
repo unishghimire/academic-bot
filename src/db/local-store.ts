@@ -324,5 +324,17 @@ export const localStore = {
     const key = `expired_notice:${userId}:${dateStr}`;
     data.warningsSent[key] = new Date().toISOString();
     saveData(data);
+  },
+
+  // Hourly Motivation State Tracking
+  getMotivationState(): { lastIndex: number; lastSentAt?: string } {
+    const data = ensureDataFile();
+    return (data as any).motivationState || { lastIndex: -1 };
+  },
+
+  setMotivationState(state: { lastIndex: number; lastSentAt?: string }): void {
+    const data = ensureDataFile();
+    (data as any).motivationState = state;
+    saveData(data);
   }
 };

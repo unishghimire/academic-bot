@@ -28,6 +28,8 @@ export declare const env: {
     CHANNEL_ERROR_LOGS?: string | undefined;
     CHANNEL_AUDIT_LOGS?: string | undefined;
     CHANNEL_ASSIGNMENT_REVIEWS?: string | undefined;
+    CHANNEL_DISCIPLINE?: string | undefined;
+    CHANNEL_MOTIVATION?: string | undefined;
     STRIPE_SECRET_KEY?: string | undefined;
     STRIPE_WEBHOOK_SECRET?: string | undefined;
     SUPABASE_SERVICE_ROLE_KEY?: string | undefined;

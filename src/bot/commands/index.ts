@@ -36,10 +36,11 @@ import {
 } from './admin.commands.js';
 import { setupServerCommand } from './setup.command.js';
 import { announceCommand } from './announce.command.js';
+import { motivationCommand } from './motivation.command.js';
 
 /**
  * PHASE 1 ACTIVE COMMANDS:
- * Payment verification, role granting, subscription tracking, meeting scheduling, and announcements.
+ * Payment verification, role granting, subscription tracking, meeting scheduling, announcements, and hourly motivation.
  * All other features are safely hidden until user requests expansion.
  */
 export const allCommands = [
@@ -55,6 +56,7 @@ export const allCommands = [
   // Meeting Scheduling & Broadcasts
   meetingCommand,
   announceCommand,
+  motivationCommand,
 
   // System & Administration
   adminDashboardCommand,

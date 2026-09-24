@@ -61,4 +61,62 @@ export async function resolveAnnouncementChannel(guild, preferredChannelId) {
         return null;
     }
 }
+/**
+ * Robustly resolves the Discipline / Motivation text channel (#🗿・discipline):
+ * 1. Checks specific preferred/passed channel ID
+ * 2. Checks env.CHANNEL_DISCIPLINE if configured and exists in guild
+ * 3. Checks env.CHANNEL_MOTIVATION if configured and exists in guild
+ * 4. Fuzzy match: Any text channel containing 'discipline' (e.g. 🗿・discipline)
+ * 5. Fuzzy match: Any text channel containing 'motivation' (e.g. daily-motivation)
+ * 6. Fallback: resolveAnnouncementChannel(guild)
+ */
+export async function resolveDisciplineChannel(guild, preferredChannelId) {
+    try {
+        let channels = guild.channels.cache;
+        if (typeof guild.channels.fetch === 'function') {
+            try {
+                const fetched = await guild.channels.fetch();
+                if (fetched)
+                    channels = fetched;
+            }
+            catch {
+                channels = guild.channels.cache;
+            }
+        }
+        if (preferredChannelId && channels.has(preferredChannelId)) {
+            const ch = channels.get(preferredChannelId);
+            if (ch && (typeof ch.isTextBased === 'function' ? ch.isTextBased() : true)) {
+                return ch;
+            }
+        }
+        if (env.CHANNEL_DISCIPLINE && channels.has(env.CHANNEL_DISCIPLINE)) {
+            const ch = channels.get(env.CHANNEL_DISCIPLINE);
+            if (ch && (typeof ch.isTextBased === 'function' ? ch.isTextBased() : true)) {
+                return ch;
+            }
+        }
+        if (env.CHANNEL_MOTIVATION && channels.has(env.CHANNEL_MOTIVATION)) {
+            const ch = channels.get(env.CHANNEL_MOTIVATION);
+            if (ch && (typeof ch.isTextBased === 'function' ? ch.isTextBased() : true)) {
+                return ch;
+            }
+        }
+        const channelList = Array.from(channels.values ? channels.values() : []);
+        const textChannels = channelList.filter(c => c && (typeof c.isTextBased === 'function' ? c.isTextBased() : true));
+        // 1. Matches "discipline" (e.g. 🗿・discipline, discipline)
+        const disciplineCh = textChannels.find(c => c.name?.toLowerCase().includes('discipline'));
+        if (disciplineCh)
+            return disciplineCh;
+        // 2. Matches "motivation" (e.g. daily-motivation, motivation)
+        const motivationCh = textChannels.find(c => c.name?.toLowerCase().includes('motivation'));
+        if (motivationCh)
+            return motivationCh;
+        // 3. Fallback to general or announcement
+        return resolveAnnouncementChannel(guild);
+    }
+    catch (err) {
+        logger.warn({ err: err?.message }, 'Failed to resolve discipline channel');
+        return null;
+    }
+}
 //# sourceMappingURL=channel.utils.js.map

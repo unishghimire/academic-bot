@@ -29,6 +29,8 @@ const envSchema = z.object({
     CHANNEL_ERROR_LOGS: z.string().optional(),
     CHANNEL_AUDIT_LOGS: z.string().optional(),
     CHANNEL_ASSIGNMENT_REVIEWS: z.string().optional(),
+    CHANNEL_DISCIPLINE: z.string().optional(),
+    CHANNEL_MOTIVATION: z.string().optional(),
     // Backend / Platform
     ACADEMY_API_SECRET: z.string().default('academy_api_secret_default_key_2026'),
     ACADEMY_WEBSITE_URL: z.string().default('https://academic-student-portal.vercel.app'),

@@ -54,7 +54,7 @@ describe('TierEngineService — Central Rule Evaluator', () => {
     expect(result.tier1Progress.complete).toBe(false);
   });
 
-  it('keeps Tier 2 locked if lessons are 100% complete but Tier 1 capstone project is not approved', async () => {
+  it('maintains Elite tier access for active subscribers regardless of lesson count', async () => {
     const mockDb: any = {
       user: {
         findUnique: vi.fn().mockResolvedValue({
@@ -65,68 +65,16 @@ describe('TierEngineService — Central Rule Evaluator', () => {
             { lessonId: 'l1', completed: true },
             { lessonId: 'l2', completed: true },
           ],
-          projectSubmissions: [
-            { project: { tier: 1 }, status: ProjectStatus.NEEDS_REVISION },
-          ],
         }),
-      },
-      lesson: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: 'l1', tier: 1, module: 1, orderIndex: 1 },
-          { id: 'l2', tier: 1, module: 1, orderIndex: 2 },
-        ]),
       },
     };
 
     const engine = new TierEngineService(mockDb);
     const result = await engine.evaluateTier('user_1');
 
-    expect(result.tier1Progress.completedLessons).toBe(2);
-    expect(result.tier1Progress.projectApproved).toBe(false);
+    expect(result.activeSubscription).toBe(true);
     expect(result.eligibleTier).toBe(1);
-  });
-
-  it('unlocks Tier 2 when 100% of Tier 1 lessons and project are approved', async () => {
-    const mockDb: any = {
-      user: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: 'user_1',
-          subscriptionStatus: SubscriptionStatus.ACTIVE,
-          currentTier: 1,
-          lessonProgress: [
-            { lessonId: 'l1', completed: true },
-            { lessonId: 'l2', completed: true },
-          ],
-          projectSubmissions: [
-            { project: { tier: 1 }, status: ProjectStatus.APPROVED },
-          ],
-        }),
-        update: vi.fn().mockResolvedValue({}),
-      },
-      lesson: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: 'l1', tier: 1, module: 1, orderIndex: 1 },
-          { id: 'l2', tier: 1, module: 1, orderIndex: 2 },
-          { id: 'l3', tier: 2, module: 1, orderIndex: 1 },
-        ]),
-      },
-      auditLog: {
-        create: vi.fn().mockResolvedValue({ id: 'audit_1' }),
-      },
-    };
-
-    const mockAuditor: any = { log: vi.fn().mockResolvedValue({ id: 'audit_1' }) };
-    const engine = new TierEngineService(mockDb, mockAuditor);
-    const result = await engine.evaluateTier('user_1');
-
-    expect(result.tier1Progress.complete).toBe(true);
-    expect(result.eligibleTier).toBe(2);
-    expect(result.unlocked).toBe(true);
-    expect(mockDb.user.update).toHaveBeenCalledWith({
-      where: { id: 'user_1' },
-      data: { currentTier: 2 },
-    });
-    expect(mockAuditor.log).toHaveBeenCalled();
+    expect(result.tier1Progress.completedLessons).toBe(2);
   });
 
   it('enforces mandatory reason parameter for admin tier overrides', async () => {

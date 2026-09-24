@@ -15,6 +15,7 @@ import { initRoleSyncJob } from './jobs/role-sync.job.js';
 import { initExpiryCheckJob } from './jobs/expiry-check.job.js';
 import { initPaymentSyncJob } from './jobs/payment-sync.job.js';
 import { initMeetingLiveJob } from './jobs/meeting-live.job.js';
+import { initHourlyMotivationJob } from './jobs/hourly-motivation.job.js';
 import { deployCommands } from './deploy-commands.js';
 import { logger } from '../utils/logger.js';
 import { createErrorEmbed } from '../utils/embed-builder.js';
@@ -98,6 +99,7 @@ export function createDiscordClient(): Client {
     initExpiryCheckJob(client);
     initPaymentSyncJob(client);
     initMeetingLiveJob(client);
+    initHourlyMotivationJob(client);
   });
 
   // Automatically enforce single-server restriction upon new guild join
